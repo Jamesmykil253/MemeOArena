@@ -5,10 +5,10 @@ using MOBA.Core;
 namespace MOBA.Data
 {
     /// <summary>
-    /// Holds the runtime data for a player.  This context is passed to various
-    /// systems and state machines.  It stores references to ScriptableObjects
-    /// (templates) and mutable state such as current health, carried points and
-    /// energy.  Use this class to encapsulate all per‑player variables.
+    /// Holds the runtime data for a player.  This context is passed to 
+    /// various systems and state machines.  It stores references to 
+    /// ScriptableObjects (templates) and mutable state such as current health, carried points
+    /// and energy.  Use this class to encapsulate all per‑player variables.
     /// </summary>
     public class PlayerContext
     {
@@ -22,6 +22,7 @@ namespace MOBA.Data
         public float currentHP;
         public int level = 1;
         public float defense;
+        public float magicDefense;
         public float attack;
         public float moveSpeed;
         public int carriedPoints;
@@ -43,8 +44,8 @@ namespace MOBA.Data
         }
 
         /// <summary>
-        /// Reset runtime stats based on the base template and level.  Call this
-        /// when spawning or respawning.
+        /// Reset runtime stats based on the base template and level.  Call 
+        /// this when spawning or respawning.
         /// </summary>
         public void ResetToTemplate()
         {
@@ -53,6 +54,7 @@ namespace MOBA.Data
                 currentHP = baseStats.MaxHP;
                 attack = baseStats.Attack;
                 defense = baseStats.Defense;
+                magicDefense = baseStats.MagicDefense;
                 moveSpeed = baseStats.MoveSpeed;
             }
             carriedPoints = 0;
@@ -62,16 +64,28 @@ namespace MOBA.Data
         }
 
         /// <summary>
-        /// Apply damage to the player after defense mitigation.  Damage cannot
-        /// reduce HP below zero.
+        /// Apply mitigated damage to the player. Damage should already
+        /// include any defense or reduction calculations. HP is clamped
+        /// to a minimum of zero.
         /// </summary>
-        public void TakeDamage(int damage)
+        /// <param name="mitigatedDamage">The final damage amount after mitigation.</param>
+        public void ApplyDamage(int mitigatedDamage)
         {
-            currentHP -= damage;
+            currentHP -= mitigatedDamage;
             if (currentHP < 0f)
             {
                 currentHP = 0f;
             }
+        }
+
+        /// <summary>
+        /// Obsolete. Use <see cref="ApplyDamage(int)"/> instead.
+        /// This method forwards to ApplyDamage for backward compatibility.
+        /// </summary>
+        [System.Obsolete("Use ApplyDamage(int mitigatedDamage) instead.")]
+        public void TakeDamage(int damage)
+        {
+            ApplyDamage(damage);
         }
 
         /// <summary>

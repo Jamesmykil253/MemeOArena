@@ -5,13 +5,28 @@ using MOBA.Data;
 namespace MOBA.Spawn
 {
     /// <summary>
-    /// Handles deterministic player spawning using a finite state machine.  Each
-    /// state performs a portion of the spawn pipeline and signals completion
-    /// events to transition to the next state.  On any failure, the machine
-    /// enters an error state and cleans up.
+    /// Handles deterministic player spawning using a finite state machine.
+    /// Each state performs a portion of the spawn pipeline and signals
+    /// completion events to transition to the next state.  On any failure,
+    /// the machine enters an error state and cleans up.
     /// </summary>
     public class SpawnMachine : StateMachine
     {
+        public enum SpawnError
+        {
+            None,
+            SetupFailed,
+            AssignmentFailed,
+            ValidationFailed,
+            FinalizationFailed
+        }
+
+        /// <summary>
+        /// The most recent error encountered during the spawn pipeline.
+        /// Defaults to None when there is no error.
+        /// </summary>
+        public SpawnError LastError { get; private set; } = SpawnError.None;
+
         private readonly PlayerContext ctx;
         private readonly IdleState idle;
         private readonly InitialSetupState setup;
@@ -43,6 +58,7 @@ namespace MOBA.Spawn
         }
         public void SetupError()
         {
+            LastError = SpawnError.SetupFailed;
             Change(error);
         }
         public void StatsAssigned()
@@ -51,6 +67,7 @@ namespace MOBA.Spawn
         }
         public void AssignmentError()
         {
+            LastError = SpawnError.AssignmentFailed;
             Change(error);
         }
         public void ValidationOK()
@@ -59,6 +76,7 @@ namespace MOBA.Spawn
         }
         public void ValidationFailure()
         {
+            LastError = SpawnError.ValidationFailed;
             Change(error);
         }
         public void FinalizationOK()
@@ -67,6 +85,7 @@ namespace MOBA.Spawn
         }
         public void FinalizationError()
         {
+            LastError = SpawnError.FinalizationFailed;
             Change(error);
         }
         public void Retry()

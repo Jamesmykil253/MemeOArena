@@ -1,6 +1,10 @@
-using UnityEngine;
 using MOBA.Core;
 using MOBA.Data;
+using MOBA.Actors;
+using System.Collections.Generic;
+using UnityEngine;
+using MOBA.Combat;
+using MOBA.Controllers;
 
 namespace MOBA.Controllers
 {
@@ -22,10 +26,12 @@ namespace MOBA.Controllers
         // Current ability being cast
         private AbilityDef currentAbility;
         private float timer;
+        private readonly IAbilityTargetProvider targetProvider;
 
-        public AbilityController(PlayerContext context)
+        public AbilityController(PlayerContext context, IAbilityTargetProvider provider = null)
         {
             ctx = context;
+            targetProvider = provider ?? FirstObjectDummyTargetProvider.Instance;
             idle = new IdleState(this);
             casting = new CastingState(this);
             executing = new ExecutingState(this);
@@ -105,9 +111,7 @@ namespace MOBA.Controllers
             public void Tick(float dt)
             {
                 ctrl.timer -= dt;
-                // Cancel if player moved or took damage.  In a full implementation
-                // this check would look at locomotion or damage flags.  Here we
-                // simply allow the cast to complete.
+                // TODO: cancel on movement/damage flags via LocomotionController hooks.
                 if (ctrl.timer <= 0f)
                 {
                     ctrl.timer = ctrl.currentAbility.Cooldown;
@@ -121,9 +125,7 @@ namespace MOBA.Controllers
             public ExecutingState(AbilityController c) { ctrl = c; }
             public void Enter()
             {
-                // Apply the ability’s effect.  For demonstration we just deal
-                // damage to a dummy target.  In a real game this would call
-                // CombatSystem.ApplyAbility.
+                // Apply the ability’s effect.
                 if (ctrl.currentAbility != null)
                 {
                     // Deduct ultimate energy if this was an ultimate
@@ -134,7 +136,14 @@ namespace MOBA.Controllers
                         ctrl.ctx.ultimateReady = false;
                         ctrl.ctx.ultimateCooldownRemaining = ctrl.ctx.ultimateDef.energyRequirement / ctrl.ctx.ultimateDef.cooldownConstant;
                     }
-                    // Here we would emit an ability cast event
+
+                    var target = ctrl.targetProvider?.FindPrimaryTarget(ctrl.ctx);
+                    if (target != null)
+                    {
+                        // Cast after multiply to avoid truncation.
+                        int damage = (int)(ctrl.currentAbility.Ratio * ctrl.ctx.attack);
+                        target.TakeDamage(damage);
+                    }
                 }
             }
             public void Exit() { }

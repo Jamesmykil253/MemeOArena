@@ -4,8 +4,8 @@ using MOBA.Data;
 namespace MOBA.Combat
 {
     /// <summary>
-    /// Provides utility methods for computing damage using the RSB model and
-    /// defense mitigation.  This system is stateless and can be unit tested.
+    /// Provides utility methods for computing damage using the RSB model
+    /// and defense mitigation.  This system is stateless and can be unit tested.
     /// </summary>
     public static class CombatSystem
     {
@@ -51,6 +51,37 @@ namespace MOBA.Combat
         public static float ComputeEffectiveHP(float maxHP, float defense)
         {
             return maxHP * (1f + defense / 600f);
+        }
+
+        /// <summary>
+        /// Compute final damage applying RSB formulas, defense penetration and critical hits.
+        /// This method is deterministic if a seeded System.Random is provided.
+        /// </summary>
+        /// <param name="attackStat">Attacker's attack stat.</param>
+        /// <param name="level">Attacker's level for the RSB formula.</param>
+        /// <param name="ability">Ability definition containing coefficients, crit and penetration.</param>
+        /// <param name="defenderDefense">Defender's defense stat before penetration.</param>
+        /// <param name="rng">Seeded RNG for deterministic crit evaluation.</param>
+        public static int ComputeFinalDamage(float attackStat, int level, AbilityDef ability, float defenderDefense, System.Random rng)
+        {
+            // Compute raw damage
+            int raw = ComputeRawDamage(ability, attackStat, level);
+            // Apply defense penetration
+            float adjustedDefense = defenderDefense - ability.DefensePenetration;
+            if (adjustedDefense < 0f) adjustedDefense = 0f;
+            // Apply mitigation curve
+            int mitigated = ComputeDamageTaken(raw, adjustedDefense);
+            // Determine critical hit
+            bool crit = false;
+            if (ability.CritChance > 0f && rng != null)
+            {
+                crit = rng.NextDouble() < ability.CritChance;
+            }
+            if (crit)
+            {
+                mitigated = Mathf.FloorToInt(mitigated * ability.CritMultiplier);
+            }
+            return mitigated;
         }
     }
 }

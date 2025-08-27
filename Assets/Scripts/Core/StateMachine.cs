@@ -18,18 +18,27 @@ namespace MOBA.Core
         public IState Current { get; private set; }
 
         /// <summary>
+        /// The reason for the most recent state transition.  This is optional
+        /// and may be null if no reason was provided.
+        /// </summary>
+        public string LastTransitionReason { get; private set; }
+
+        /// <summary>
         /// Change to a new state.  If the new state is the same as the
         /// current state the call is ignored.  Otherwise the current state's
         /// Exit method is invoked, the current reference is updated and
         /// Enter is invoked on the new state.
         /// </summary>
         /// <param name="next">The state to transition into.</param>
-        public void Change(IState next)
+        /// <param name="reason">Optional reason string for debugging.</param>
+        public void Change(IState next, string reason = null)
         {
             if (ReferenceEquals(Current, next) || next == null)
             {
                 return;
             }
+            // Update transition reason
+            LastTransitionReason = reason;
             Current?.Exit();
             Current = next;
             Current.Enter();

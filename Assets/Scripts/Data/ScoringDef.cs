@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -16,10 +17,11 @@ namespace MOBA.Data
         [Header("Base Times")]
         [Tooltip("Thresholds for points carried.  If points <= threshold[i], use baseTimes[i].")]
         public int[] thresholds = new int[] { 6, 12, 18, 24, 33 };
+
         [Tooltip("Base channel times corresponding to the thresholds above.")]
         public float[] baseTimes = new float[] { 0.5f, 1.0f, 1.5f, 2.0f, 3.0f };
 
-        [Header("Ally Synergy")] 
+        [Header("Ally Synergy")]
         [Tooltip("Multiplicative factors applied to channel time for 0,1,2,3,4 allies (including the carrier).")]
         public float[] allySynergyMultipliers = new float[] { 1.0f, 0.70f, 0.65f, 0.60f, 0.40f };
 
@@ -36,9 +38,27 @@ namespace MOBA.Data
 
         /// <summary>
         /// Get the base channel time based on the number of points carried.
+        /// Performs validation on thresholds and baseTimes before computing.
         /// </summary>
+        /// <param name="points">Carried points.</param>
         public float GetBaseTime(int points)
         {
+            // Validate array lengths
+            if (thresholds == null || baseTimes == null || thresholds.Length != baseTimes.Length)
+            {
+                throw new InvalidOperationException(
+                    $"ScoringDef {name}: thresholds and baseTimes must have the same number of elements.");
+            }
+            // Validate that thresholds are strictly ascending
+            for (int i = 1; i < thresholds.Length; i++)
+            {
+                if (thresholds[i] < thresholds[i - 1])
+                {
+                    throw new InvalidOperationException(
+                        $"ScoringDef {name}: thresholds must be sorted ascending (found {thresholds[i - 1]} then {thresholds[i]}).");
+                }
+            }
+            // Determine base time
             for (int i = 0; i < thresholds.Length; i++)
             {
                 if (points <= thresholds[i])
@@ -46,7 +66,7 @@ namespace MOBA.Data
                     return baseTimes[i];
                 }
             }
-            // If points exceed the last threshold, extrapolate using the last base time
+            // If points exceed the last threshold, return the last base time
             return baseTimes[baseTimes.Length - 1];
         }
 
@@ -56,6 +76,7 @@ namespace MOBA.Data
         public float SumSpeedFactors(IEnumerable<string> activeBuffIds)
         {
             float sum = 0f;
+            if (activeBuffIds == null) return sum;
             foreach (var buff in additiveFactors)
             {
                 foreach (var id in activeBuffIds)

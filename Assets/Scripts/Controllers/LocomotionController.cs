@@ -5,11 +5,12 @@ using MOBA.Data;
 namespace MOBA.Controllers
 {
     /// <summary>
-    /// Handles locomotion for a player using a finite state machine.  It reads
-    /// movement and jump inputs, applies deterministic kinematics from
-    /// JumpPhysicsDef and transitions between grounded, airborne, knockback and
-    /// disabled states.  The controller does not move the character directly;
-    /// instead it exposes desired velocity, allowing the physics system to
+    /// Handles locomotion for a player using a finite state machine.
+    /// It reads movement and jump inputs, applies deterministic
+    /// kinematics from JumpPhysicsDef and transitions between
+    /// grounded, airborne, knockback and disabled states.  The
+    /// controller does not move the character directly; instead it
+    /// exposes desired velocity, allowing the physics system to
     /// apply movement at a fixed timestep.
     /// </summary>
     public class LocomotionController
@@ -17,6 +18,7 @@ namespace MOBA.Controllers
         private readonly PlayerContext ctx;
         private readonly StateMachine fsm = new StateMachine();
         private readonly JumpPhysicsDef jumpDef;
+        private readonly IInputSource input;
 
         // Runtime variables for jump physics
         private float verticalVelocity;
@@ -27,9 +29,15 @@ namespace MOBA.Controllers
 
         public Vector3 DesiredVelocity { get; private set; }
 
-        public LocomotionController(PlayerContext context)
+        private readonly GroundedState grounded;
+        private readonly AirborneState airborne;
+        private readonly KnockbackState knockback;
+        private readonly DisabledState disabled;
+
+        public LocomotionController(PlayerContext context, IInputSource inputSource)
         {
             ctx = context;
+            input = inputSource;
             jumpDef = context.baseStats.JumpPhysics;
             // Initialize states
             grounded = new GroundedState(this);
@@ -39,12 +47,6 @@ namespace MOBA.Controllers
             fsm.Change(grounded);
         }
 
-        // Define states as nested classes
-        private readonly GroundedState grounded;
-        private readonly AirborneState airborne;
-        private readonly KnockbackState knockback;
-        private readonly DisabledState disabled;
-
         public void Update(float dt)
         {
             fsm.Update(dt);
@@ -52,7 +54,6 @@ namespace MOBA.Controllers
 
         public void Knockback(Vector3 force)
         {
-            // Enter knockback state and apply force
             knockback.SetKnockback(force);
             fsm.Change(knockback);
         }
@@ -84,15 +85,15 @@ namespace MOBA.Controllers
             }
             public override void Tick(float dt)
             {
-                // Read input for horizontal movement
-                float h = Input.GetAxisRaw("Horizontal");
-                float v = Input.GetAxisRaw("Vertical");
+                // Read input for horizontal movement via injected input source
+                float h = controller.input.GetHorizontal();
+                float v = controller.input.GetVertical();
                 Vector3 move = new Vector3(h, 0f, v);
                 move = Vector3.ClampMagnitude(move, 1f);
                 controller.DesiredVelocity = move * controller.ctx.moveSpeed;
 
                 // Jump input
-                if (Input.GetButtonDown("Jump"))
+                if (controller.input.IsJumpPressed())
                 {
                     controller.verticalVelocity = controller.jumpDef.InitialVelocity;
                     controller.coyoteTimer = controller.jumpDef.CoyoteTime;
@@ -110,14 +111,14 @@ namespace MOBA.Controllers
                 // Apply gravity
                 controller.verticalVelocity += controller.jumpDef.Gravity * dt;
                 // Move horizontally based on input
-                float h = Input.GetAxisRaw("Horizontal");
-                float v = Input.GetAxisRaw("Vertical");
+                float h = controller.input.GetHorizontal();
+                float v = controller.input.GetVertical();
                 Vector3 move = new Vector3(h, 0f, v);
                 move = Vector3.ClampMagnitude(move, 1f);
                 controller.DesiredVelocity = move * controller.ctx.moveSpeed;
 
                 // Jump again if allowed (double jump)
-                if (Input.GetButtonDown("Jump") && !controller.doubleJumpUsed && controller.doubleJumpTimer > 0f)
+                if (controller.input.IsJumpPressed() && !controller.doubleJumpUsed && controller.doubleJumpTimer > 0f)
                 {
                     controller.verticalVelocity = controller.jumpDef.InitialVelocity;
                     controller.doubleJumpUsed = true;
@@ -187,9 +188,9 @@ namespace MOBA.Controllers
         /// <summary>
         /// Detect if the player has landed.  In a real implementation this
         /// would perform a collision check against the environment.  Here it
-        /// simply uses Unity's CharacterController or a flag updated by
-        /// collision callbacks.  For demonstration we assume the player is
-        /// grounded when verticalVelocity is negative and near zero.
+        /// simply uses a flag updated by collision callbacks.  For
+        /// demonstration we assume the player is grounded when verticalVelocity
+        /// is negative and near zero.
         /// </summary>
         private bool IsGroundDetected()
         {
