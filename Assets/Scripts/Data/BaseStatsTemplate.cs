@@ -1,22 +1,14 @@
 using UnityEngine;
 
-namespace MOBA.Data
+/// <summary>
+/// ScriptableObject for basic player stats such as health, attack, defense and move speed.
+/// In the real game, this would include jump physics and more.
+/// </summary>
+[CreateAssetMenu(menuName = "Game/BaseStatsTemplate")]
+public class BaseStatsTemplate : ScriptableObject
 {
-    /// <summary>
-    /// Defines the base statistics and jump physics for an archetype.  
-    /// Multiple heroes can reference the same template to share common stats.
-    /// </summary>
-    [CreateAssetMenu(menuName = "MOBA/Data/BaseStatsTemplate", fileName = "BaseStatsTemplate", order = 1)]
-    public class BaseStatsTemplate : ScriptableObject
-    {
-        [Header("Core Stats")]
-        public float MaxHP = 10000f;
-        public float Attack = 100f;
-        public float Defense = 0f;
-        public float MagicDefense = 0f;
-        public float MoveSpeed = 5f;
-
-        [Header("Jump Physics")]
-        public JumpPhysicsDef JumpPhysics;
-    }
+    public int maxHP;
+    public int attack;
+    public int defense;
+    public float moveSpeed;
 }
