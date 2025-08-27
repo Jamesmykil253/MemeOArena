@@ -18,6 +18,16 @@ namespace Tests.PlayMode
             public float vertical;
             public bool jump;
 
+            public float GetAxis(string axisName)
+            {
+                if (axisName == "Horizontal") return horizontal;
+                if (axisName == "Vertical") return vertical;
+                return 0f;
+            }
+            
+            public bool GetButtonDown(string buttonName) => buttonName == "Jump" && jump;
+            public bool GetButton(string buttonName) => false;
+
             public float GetHorizontal() => horizontal;
             public float GetVertical() => vertical;
             public bool IsJumpPressed()

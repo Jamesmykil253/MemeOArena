@@ -21,7 +21,7 @@ namespace Tests.PlayMode
         {
             var machine = CreateMachine();
             machine.SetupError();
-            Assert.AreEqual(SpawnMachine.SpawnError.SetupFailed, machine.LastError);
+            Assert.AreEqual("Setup failed", machine.LastError);
         }
 
         [Test]
@@ -29,7 +29,7 @@ namespace Tests.PlayMode
         {
             var machine = CreateMachine();
             machine.AssignmentError();
-            Assert.AreEqual(SpawnMachine.SpawnError.AssignmentFailed, machine.LastError);
+            Assert.AreEqual("Assignment failed", machine.LastError);
         }
 
         [Test]
@@ -37,7 +37,7 @@ namespace Tests.PlayMode
         {
             var machine = CreateMachine();
             machine.ValidationFailure();
-            Assert.AreEqual(SpawnMachine.SpawnError.ValidationFailed, machine.LastError);
+            Assert.AreEqual("Validation failed", machine.LastError);
         }
 
         [Test]
@@ -45,7 +45,7 @@ namespace Tests.PlayMode
         {
             var machine = CreateMachine();
             machine.FinalizationError();
-            Assert.AreEqual(SpawnMachine.SpawnError.FinalizationFailed, machine.LastError);
+            Assert.AreEqual("Finalization failed", machine.LastError);
         }
     }
 }

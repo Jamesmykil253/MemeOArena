@@ -1,38 +1,53 @@
 using NUnit.Framework;
 using System;
-
+using UnityEngine;
 using MOBA.Spawn;
+using MOBA.Data;
 
-/// <summary>
-/// Tests for the simplified SpawnMachine.
-/// </summary>
-public class SpawnMachineTests
+namespace Tests.Editor
 {
-    [Test]
-    public void HappyPathSpawnsPlayer()
+    /// <summary>
+    /// Tests for the simplified SpawnMachine.
+    /// </summary>
+    public class SpawnMachineTests
     {
-        var ctx = new PlayerContext { baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>() };
-        var machine = new SpawnMachine(ctx);
-        machine.TriggerSpawn();
-        // Simulate a few frames. Each update should advance the state machine.
-        for (int i = 0; i < 4 && !machine.IsFinished; i++)
+        [Test]
+        public void HappyPathSpawnsPlayer()
         {
-            machine.Update(0.02f);
-        }
-        Assert.IsTrue(machine.Spawned);
-    }
-
-    [Test]
-    public void ErrorWhenMissingBaseStats()
-    {
-        var ctx = new PlayerContext { baseStats = null };
-        var machine = new SpawnMachine(ctx);
-        machine.TriggerSpawn();
-        Assert.Throws<InvalidOperationException>(() => {
-            while (!machine.IsFinished)
+            var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
+            var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
+            var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
+            var ctx = new PlayerContext("test", baseStats, ultimateDef, scoringDef);
+            
+            var machine = new SpawnMachine(ctx);
+            machine.SpawnRequest();
+            // Simulate a few frames. Each update should advance the state machine.
+            for (int i = 0; i < 4 && !machine.IsFinished; i++)
             {
                 machine.Update(0.02f);
             }
-        });
+            Assert.IsTrue(machine.Spawned);
+        }
+
+        [Test]
+        public void ErrorWhenMissingBaseStats()
+        {
+            var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
+            var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
+            var ctx = new PlayerContext("test", null, ultimateDef, scoringDef);
+            
+            var machine = new SpawnMachine(ctx);
+            machine.SpawnRequest();
+            
+            // Simulate updates until finished
+            for (int i = 0; i < 10 && !machine.IsFinished; i++)
+            {
+                machine.Update(0.02f);
+            }
+            
+            Assert.IsTrue(machine.IsFinished);
+            Assert.IsFalse(machine.Spawned);
+            Assert.AreEqual("Assignment failed", machine.LastError);
+        }
     }
 }

@@ -13,33 +13,33 @@ namespace Tests.PlayMode
         public void ApplyDamageReducesHP()
         {
             var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
-            baseStats.MaxHP = 100f;
+            baseStats.MaxHP = 100;
             var ctx = new PlayerContext("player", baseStats, null, null);
-            ctx.currentHP = 100f;
+            ctx.currentHP = 100;
             ctx.ApplyDamage(30);
-            Assert.AreEqual(70f, ctx.currentHP);
+            Assert.AreEqual(70, ctx.currentHP);
         }
 
         [Test]
         public void ApplyDamageClampsAtZero()
         {
             var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
-            baseStats.MaxHP = 20f;
+            baseStats.MaxHP = 20;
             var ctx = new PlayerContext("player", baseStats, null, null);
-            ctx.currentHP = 20f;
+            ctx.currentHP = 20;
             ctx.ApplyDamage(50);
-            Assert.AreEqual(0f, ctx.currentHP);
+            Assert.AreEqual(0, ctx.currentHP);
         }
 
         [Test]
         public void TakeDamageCallsApplyDamage()
         {
             var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
-            baseStats.MaxHP = 100f;
+            baseStats.MaxHP = 100;
             var ctx = new PlayerContext("player", baseStats, null, null);
-            ctx.currentHP = 100f;
+            ctx.currentHP = 100;
             ctx.ApplyDamage(25);
-            Assert.AreEqual(75f, ctx.currentHP);
+            Assert.AreEqual(75, ctx.currentHP);
         }
     }
 }

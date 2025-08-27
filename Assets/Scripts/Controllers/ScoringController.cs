@@ -29,6 +29,7 @@ namespace MOBA.Controllers
         public ScoringController(PlayerContext context)
         {
             ctx = context;
+            fsm = new StateMachine("ScoringController", context.playerId);
             carrying = new CarryingState(this);
             channeling = new ChannelingState(this);
             deposited = new DepositedState(this);

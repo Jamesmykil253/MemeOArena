@@ -24,6 +24,22 @@ namespace MOBA.Core
         public string LastTransitionReason { get; private set; }
 
         /// <summary>
+        /// Name of this state machine for logging purposes.
+        /// </summary>
+        public string Name { get; private set; }
+
+        /// <summary>
+        /// Player ID associated with this state machine for telemetry.
+        /// </summary>
+        public string PlayerId { get; private set; }
+
+        public StateMachine(string name = "FSM", string playerId = "")
+        {
+            Name = name;
+            PlayerId = playerId;
+        }
+
+        /// <summary>
         /// Change to a new state.  If the new state is the same as the
         /// current state the call is ignored.  Otherwise the current state's
         /// Exit method is invoked, the current reference is updated and
@@ -37,6 +53,18 @@ namespace MOBA.Core
             {
                 return;
             }
+
+            // Log the state transition for debugging
+            string fromState = Current?.GetType().Name ?? "null";
+            string toState = next?.GetType().Name ?? "null";
+            
+            // In development, log to Unity console
+            if (Application.isEditor)
+            {
+                Debug.Log($"[{Name}][{PlayerId}] {fromState} -> {toState}" + 
+                         (!string.IsNullOrEmpty(reason) ? $" ({reason})" : ""));
+            }
+
             // Update transition reason
             LastTransitionReason = reason;
             Current?.Exit();

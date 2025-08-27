@@ -18,7 +18,7 @@ namespace MOBA.Bootstrap
         public UltimateEnergyDef ultimateDef;
         public ScoringDef scoringDef;
         public AbilityDef[] abilities;
-        public InputSystem_Actions inputActions;
+        public MOBA.Input.InputSystem_Actions inputActions;
 
         private PlayerContext context;
         private LocomotionController locomotion;

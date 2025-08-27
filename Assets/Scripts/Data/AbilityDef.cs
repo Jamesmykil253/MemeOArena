@@ -24,6 +24,9 @@ namespace MOBA.Data
         public float CastTime = 0.25f;
         public float Cooldown = 5f;
 
+        [Header("Resource Cost")]
+        public float energyCost = 0f;
+
         [Header("RSB Coefficients")]
         public float Ratio = 1f; // R in the RSB formula
         public float Slider = 0f; // S in the RSB formula

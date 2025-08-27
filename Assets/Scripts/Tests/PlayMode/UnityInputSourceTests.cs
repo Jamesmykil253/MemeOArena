@@ -14,7 +14,7 @@ namespace Tests.PlayMode
         public void DefaultInputValuesAreZero()
         {
             // Arrange: create actions asset and enable player map
-            var actions = new InputSystem_Actions();
+            var actions = new MOBA.Input.InputSystem_Actions();
             var player = actions.Player;
             player.Enable();
 

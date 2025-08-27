@@ -5,44 +5,59 @@ using MOBA.Controllers;
 using MOBA.Combat;
 using System.Collections.Generic;
 
-public class AbilityControllerTests
+namespace Tests.Editor
 {
-    private class FakeDamageable : MonoBehaviour, IDamageable
+    public class AbilityControllerTests
     {
-        public int DamageTakenTotal { get; private set; }
-        public void TakeDamage(int amount) => DamageTakenTotal += amount;
-    }
-
-    private class FakeProvider : IAbilityTargetProvider
-    {
-        private readonly IDamageable target;
-        public FakeProvider(IDamageable t) { target = t; }
-        public IDamageable FindPrimaryTarget(PlayerContext ctx) => target;
-    }
-
-    [Test]
-    public void Ability_DealsExpectedDamage_AndReturnsToIdle()
-    {
-        var ctx = new PlayerContext
+        [Test]
+        public void AbilityController_RegeneratesEnergyOverTime()
         {
-            attack = 50f,
-            abilities = new List<AbilityDef>
+            var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
+            baseStats.Attack = 50;
+            
+            var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
+            ultimateDef.maxEnergy = 100f;
+            ultimateDef.regenRate = 10f;
+            ultimateDef.required = 80f;
+            
+            var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
+            var ctx = new PlayerContext("test", baseStats, ultimateDef, scoringDef);
+            ctx.ultimateEnergy = 0f;
+
+            var controller = new AbilityController(ctx);
+            
+            // Should not be ready initially
+            Assert.IsFalse(controller.IsUltimateReady);
+            
+            // Simulate 8 seconds of regen at 10 per second → 80 energy
+            for (int i = 0; i < 80; i++)
             {
-                new AbilityDef { Ratio = 2f, CastTime = 0.1f, Cooldown = 0.2f }
-            },
-            ultimateDef = new UltimateEnergyDef { energyRequirement = 100f, cooldownConstant = 50f }
-        };
+                controller.Update(0.1f);
+            }
+            
+            Assert.IsTrue(controller.IsUltimateReady);
+            Assert.AreEqual(80f, ctx.ultimateEnergy, 0.1f);
+        }
 
-        var go = new GameObject("FakeTarget");
-        var fake = go.AddComponent<FakeDamageable>();
-        var provider = new FakeProvider(fake);
-        var ctrl = new AbilityController(ctx, provider);
+        [Test]
+        public void AbilityController_CapsEnergyAtMaximum()
+        {
+            var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
+            var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
+            ultimateDef.maxEnergy = 50f;
+            ultimateDef.regenRate = 10f;
+            ultimateDef.required = 40f;
+            
+            var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
+            var ctx = new PlayerContext("test", baseStats, ultimateDef, scoringDef);
+            ctx.ultimateEnergy = 45f; // Start near cap
 
-        ctrl.TryCast(0);
-        ctrl.Update(0.1f); // complete cast
-        ctrl.Update(0.0f); // execute
-        ctrl.Update(0.2f); // finish cooldown
-
-        Assert.AreEqual(100, fake.DamageTakenTotal);
+            var controller = new AbilityController(ctx);
+            
+            // Update beyond the cap
+            controller.Update(1.0f); // Would add 10, but should cap at 50
+            
+            Assert.AreEqual(50f, ctx.ultimateEnergy);
+        }
     }
 }

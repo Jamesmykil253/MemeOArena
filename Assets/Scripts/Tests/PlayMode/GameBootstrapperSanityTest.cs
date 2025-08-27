@@ -17,15 +17,15 @@ namespace Tests.PlayMode
         {
             // Arrange: create fake ScriptableObjects
             var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
-            baseStats.MaxHP = 100f;
-            baseStats.Attack = 10f;
-            baseStats.Defense = 5f;
+            baseStats.MaxHP = 100;
+            baseStats.Attack = 10;
+            baseStats.Defense = 5;
             baseStats.MoveSpeed = 5f;
 
             var ultDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             var scoreDef = ScriptableObject.CreateInstance<ScoringDef>();
             var ability = ScriptableObject.CreateInstance<AbilityDef>();
-            var inputActions = new InputSystem_Actions();
+            var inputActions = new MOBA.Input.InputSystem_Actions();
 
             var go = new GameObject();
             var bootstrap = go.AddComponent<GameBootstrapper>();
