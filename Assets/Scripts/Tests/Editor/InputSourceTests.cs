@@ -16,12 +16,33 @@ namespace Tests.Editor
             public float Horizontal;
             public float Vertical;
             public bool JumpDown;
+            
             public float GetAxis(string axisName) => axisName == "Horizontal" ? Horizontal : Vertical;
             public bool GetButtonDown(string buttonName) => JumpDown;
             public bool GetButton(string buttonName) => false;
+            public bool GetButtonUp(string buttonName) => false;
+            
             public float GetHorizontal() => Horizontal;
             public float GetVertical() => Vertical;
+            public UnityEngine.Vector2 GetMoveVector() => new UnityEngine.Vector2(Horizontal, Vertical);
+            
             public bool IsJumpPressed() => JumpDown;
+            public bool IsAbility1Pressed() => false;
+            public bool IsAbility2Pressed() => false;
+            public bool IsUltimatePressed() => false;
+            public bool IsScoringPressed() => false;
+            public bool IsTestAddPointsPressed() => false;
+            public bool IsTestDamagePressed() => false;
+            public bool IsCameraTogglePressed() => false;
+            public bool IsFreePanPressed() => false;
+            
+            public UnityEngine.Vector2 GetMousePosition() => UnityEngine.Vector2.zero;
+            public UnityEngine.Vector2 GetMouseDelta() => UnityEngine.Vector2.zero;
+            public bool IsMouseButtonDown(int button) => false;
+            public bool IsMouseButtonUp(int button) => false;
+            
+            public bool HasInputThisFrame() => Horizontal != 0f || Vertical != 0f || JumpDown;
+            public float GetInputMagnitude() => new UnityEngine.Vector2(Horizontal, Vertical).magnitude;
         }
 
         [Test]

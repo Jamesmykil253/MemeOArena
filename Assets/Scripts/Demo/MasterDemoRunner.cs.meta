@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: dff2df0045dc446c0887eb3558ce735d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - playerSpawnPoint: {fileID: 7408510198969638894, guid: d5cff8e55c69b4671acc65b39daf9916, type: 3}
+  - cameraPosition: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

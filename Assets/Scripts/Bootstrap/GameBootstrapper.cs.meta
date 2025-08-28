@@ -1,2 +1,15 @@
 fileFormatVersion: 2
 guid: a6ccb5322e88f4fda951f2dd809adba2
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - baseStats: {fileID: 11400000, guid: c113cf917b213493180e222477c2c758, type: 2}
+  - ultimateDef: {fileID: 11400000, guid: ab7572a1751184a2caa07d872f460d88, type: 2}
+  - scoringDef: {fileID: 11400000, guid: ec6a57b5437354875b2fb23aa3cf35df, type: 2}
+  - jumpPhysics: {fileID: 11400000, guid: df65aa5e5b08248b69f62a581490ea13, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

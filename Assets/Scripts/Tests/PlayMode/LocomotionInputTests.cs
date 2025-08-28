@@ -27,9 +27,12 @@ namespace Tests.PlayMode
             
             public bool GetButtonDown(string buttonName) => buttonName == "Jump" && jump;
             public bool GetButton(string buttonName) => false;
+            public bool GetButtonUp(string buttonName) => false;
 
             public float GetHorizontal() => horizontal;
             public float GetVertical() => vertical;
+            public Vector2 GetMoveVector() => new Vector2(horizontal, vertical);
+            
             public bool IsJumpPressed()
             {
                 bool result = jump;
@@ -37,6 +40,23 @@ namespace Tests.PlayMode
                 jump = false;
                 return result;
             }
+            
+            public bool IsAbility1Pressed() => false;
+            public bool IsAbility2Pressed() => false;
+            public bool IsUltimatePressed() => false;
+            public bool IsScoringPressed() => false;
+            public bool IsTestAddPointsPressed() => false;
+            public bool IsTestDamagePressed() => false;
+            public bool IsCameraTogglePressed() => false;
+            public bool IsFreePanPressed() => false;
+            
+            public Vector2 GetMousePosition() => Vector2.zero;
+            public Vector2 GetMouseDelta() => Vector2.zero;
+            public bool IsMouseButtonDown(int button) => false;
+            public bool IsMouseButtonUp(int button) => false;
+            
+            public bool HasInputThisFrame() => horizontal != 0f || vertical != 0f || jump;
+            public float GetInputMagnitude() => new Vector2(horizontal, vertical).magnitude;
         }
 
         [Test]

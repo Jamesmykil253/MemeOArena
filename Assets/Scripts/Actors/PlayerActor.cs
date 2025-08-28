@@ -49,19 +49,18 @@ namespace MOBA.Actors
 
         private void Update()
         {
-            // For demo purposes, trigger ability casts using number keys.
-            // In a real setup, you would use input actions mapped to abilities.
+            // Legacy demo input handlers - now handled by proper input system
+            // in DemoPlayerController and ability systems
+            /*
             if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha1))
             {
-                // AbilityController in our implementation doesn't have TryCast
-                // This is just for demo - in a full implementation, this would
-                // trigger ability casting logic
                 Debug.Log("Ability 1 pressed");
             }
             if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha2))
             {
                 Debug.Log("Ability 2 pressed");
             }
+            */
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using MOBA.Core;
 
 namespace MOBA.Input
@@ -11,43 +12,195 @@ namespace MOBA.Input
     public class UnityInputSource : IInputSource
     {
         private readonly InputSystem_Actions inputActions;
+        private Vector2 lastMousePosition;
 
         public UnityInputSource(InputSystem_Actions inputActions)
         {
             this.inputActions = inputActions;
             this.inputActions.Enable();
+            lastMousePosition = Mouse.current?.position.ReadValue() ?? Vector2.zero;
         }
 
         public float GetAxis(string axisName)
         {
-            return UnityEngine.Input.GetAxisRaw(axisName);
+            // Legacy method - map common axis names to new Input System
+            switch (axisName.ToLower())
+            {
+                case "horizontal":
+                    return GetHorizontal();
+                case "vertical":
+                    return GetVertical();
+                default:
+                    return 0f;
+            }
         }
 
         public bool GetButtonDown(string buttonName)
         {
-            return UnityEngine.Input.GetButtonDown(buttonName);
+            // Legacy method - map common button names to new Input System
+            switch (buttonName.ToLower())
+            {
+                case "jump":
+                    return IsJumpPressed();
+                case "fire1":
+                    return IsMouseButtonDown(0);
+                case "fire2":
+                    return IsMouseButtonDown(1);
+                default:
+                    return false;
+            }
         }
 
         public bool GetButton(string buttonName)
         {
-            return UnityEngine.Input.GetButton(buttonName);
+            // Legacy method - map common button names to new Input System
+            switch (buttonName.ToLower())
+            {
+                case "jump":
+                    return inputActions.Player.Jump.IsPressed();
+                case "fire1":
+                    return Mouse.current?.leftButton.isPressed ?? false;
+                case "fire2":
+                    return Mouse.current?.rightButton.isPressed ?? false;
+                default:
+                    return false;
+            }
+        }
+        
+        public bool GetButtonUp(string buttonName)
+        {
+            // Legacy method - map common button names to new Input System
+            switch (buttonName.ToLower())
+            {
+                case "jump":
+                    return inputActions.Player.Jump.WasReleasedThisFrame();
+                case "fire1":
+                    return IsMouseButtonUp(0);
+                case "fire2":
+                    return IsMouseButtonUp(1);
+                default:
+                    return false;
+            }
         }
 
         public float GetHorizontal()
         {
-            var moveValue = inputActions.Player.Move.ReadValue<UnityEngine.Vector2>();
+            var moveValue = inputActions.Player.Move.ReadValue<Vector2>();
             return moveValue.x;
         }
 
         public float GetVertical()
         {
-            var moveValue = inputActions.Player.Move.ReadValue<UnityEngine.Vector2>();
+            var moveValue = inputActions.Player.Move.ReadValue<Vector2>();
             return moveValue.y;
+        }
+        
+        public Vector2 GetMoveVector()
+        {
+            Vector2 moveValue = inputActions.Player.Move.ReadValue<Vector2>();
+            if (moveValue.magnitude > 0.01f)
+            {
+                Debug.Log($"[INPUT] Move detected: {moveValue}");
+            }
+            return moveValue;
         }
 
         public bool IsJumpPressed()
         {
             return inputActions.Player.Jump.WasPressedThisFrame();
+        }
+        
+        public bool IsAbility1Pressed()
+        {
+            return inputActions.Player.Ability1.WasPressedThisFrame();
+        }
+        
+        public bool IsAbility2Pressed()
+        {
+            return inputActions.Player.Ability2.WasPressedThisFrame();
+        }
+        
+        public bool IsUltimatePressed()
+        {
+            return inputActions.Player.Ultimate.WasPressedThisFrame();
+        }
+        
+        public bool IsScoringPressed()
+        {
+            return inputActions.Player.Scoring.WasPressedThisFrame();
+        }
+        
+        public bool IsTestAddPointsPressed()
+        {
+            return inputActions.Player.TestAddPoints.WasPressedThisFrame();
+        }
+        
+        public bool IsTestDamagePressed()
+        {
+            return inputActions.Player.TestDamage.WasPressedThisFrame();
+        }
+        
+        public bool IsCameraTogglePressed()
+        {
+            return inputActions.Player.CameraToggle.WasPressedThisFrame();
+        }
+        
+        public bool IsFreePanPressed()
+        {
+            return inputActions.Player.FreePan.WasPressedThisFrame();
+        }
+        
+        public Vector2 GetMousePosition()
+        {
+            return Mouse.current?.position.ReadValue() ?? Vector2.zero;
+        }
+        
+        public Vector2 GetMouseDelta()
+        {
+            Vector2 currentMousePos = Mouse.current?.position.ReadValue() ?? Vector2.zero;
+            Vector2 delta = currentMousePos - lastMousePosition;
+            lastMousePosition = currentMousePos;
+            return delta;
+        }
+        
+        public bool IsMouseButtonDown(int button)
+        {
+            return button switch
+            {
+                0 => Mouse.current?.leftButton.wasPressedThisFrame ?? false,
+                1 => Mouse.current?.rightButton.wasPressedThisFrame ?? false,
+                2 => Mouse.current?.middleButton.wasPressedThisFrame ?? false,
+                _ => false
+            };
+        }
+        
+        public bool IsMouseButtonUp(int button)
+        {
+            return button switch
+            {
+                0 => Mouse.current?.leftButton.wasReleasedThisFrame ?? false,
+                1 => Mouse.current?.rightButton.wasReleasedThisFrame ?? false,
+                2 => Mouse.current?.middleButton.wasReleasedThisFrame ?? false,
+                _ => false
+            };
+        }
+        
+        public bool HasInputThisFrame()
+        {
+            Vector2 move = GetMoveVector();
+            return move.magnitude > 0.01f || 
+                   IsJumpPressed() || 
+                   IsAbility1Pressed() || 
+                   IsAbility2Pressed() || 
+                   IsUltimatePressed() || 
+                   IsScoringPressed() ||
+                   IsMouseButtonDown(0) ||
+                   IsMouseButtonDown(1);
+        }
+        
+        public float GetInputMagnitude()
+        {
+            return GetMoveVector().magnitude;
         }
     }
 }
