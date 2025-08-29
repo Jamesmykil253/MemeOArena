@@ -30,7 +30,7 @@ namespace MOBA.Controllers
         public bool IsCasting => fsm.Current == castingState;
         public bool IsExecuting => fsm.Current == executingState;
         public bool IsOnCooldown => fsm.Current == cooldownState;
-        public bool IsUltimateReady => context.ultimateEnergy >= context.ultimateDef.required;
+        public bool IsUltimateReady => context.ultimateEnergy >= context.ultimateDef.energyRequirement;
         public AbilityDef CurrentAbility => currentAbility;
         
         // Events
@@ -51,8 +51,34 @@ namespace MOBA.Controllers
             executingState = new ExecutingState(this);
             cooldownState = new CooldownState(this);
             
+            // Configure validation rules for proper FSM transitions
+            SetupValidationRules();
+            
             // Start in idle state
             fsm.Change(idleState, "Initialized");
+        }
+
+        private void SetupValidationRules()
+        {
+            // Rule: Can only start casting from Idle state
+            fsm.AddTransitionRule<IdleState, CastingState>((from, to, reason) => 
+                currentAbility != null && !string.IsNullOrEmpty(reason));
+            
+            // Rule: Can only execute from Casting state  
+            fsm.AddTransitionRule<CastingState, ExecutingState>((from, to, reason) =>
+                currentAbility != null && stateTimer >= currentAbility.CastTime);
+            
+            // Rule: Must go to cooldown after execution (unless interrupted)
+            fsm.AddTransitionRule<ExecutingState, CooldownState>((from, to, reason) =>
+                currentAbility != null);
+            
+            // Rule: Can only return to idle from cooldown
+            fsm.AddTransitionRule<CooldownState, IdleState>((from, to, reason) =>
+                stateTimer >= (currentAbility?.Cooldown ?? 0f));
+            
+            // Rule: Can interrupt casting to return to idle
+            fsm.AddTransitionRule<CastingState, IdleState>((from, to, reason) =>
+                !string.IsNullOrEmpty(reason) && reason.Contains("Interrupt"));
         }
         
         public void Update(float dt)

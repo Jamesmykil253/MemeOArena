@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using MOBA.Data;
 using MOBA.Controllers;
 using MOBA.Input;
@@ -25,12 +26,12 @@ namespace MOBA.Demo
         
         // Core systems
         private PlayerContext playerContext;
-        private LocomotionController locomotion;
+        private ILocomotionController locomotion; // Updated to interface for flexibility
+        private UnifiedLocomotionController unifiedLocomotion; // Unified locomotion controller
         private AbilityController abilities;
         private ScoringController scoring;
         private IInputSource inputSource;
-        private TickManager tickManager;
-        private CameraController cameraController;
+        private UnifiedCameraController cameraController;
         
         // Runtime state
         private bool isInitialized = false;
@@ -60,34 +61,17 @@ namespace MOBA.Demo
             
             float dt = Time.deltaTime;
             
-            // Update all systems
-            locomotion?.Update(dt);
+            // Update all systems  
+            // DISABLED: Basic locomotion conflicts with PhysicsLocomotionController
+            // locomotion?.Update(dt);
             abilities?.Update(dt);
             scoring?.Update(dt);
             
-            // Apply movement from locomotion system
-            if (locomotion != null)
-            {
-                Vector3 desiredVelocity = locomotion.DesiredVelocity;
-                if (desiredVelocity.magnitude > 0.01f)
-                {
-                    // Apply movement directly to transform (simple approach for demo)
-                    transform.position += desiredVelocity * dt;
-                    
-                    // Optional: Rotate to face movement direction
-                    if (desiredVelocity.magnitude > 0.1f)
-                    {
-                        Vector3 lookDirection = desiredVelocity.normalized;
-                        lookDirection.y = 0; // Keep on horizontal plane
-                        if (lookDirection != Vector3.zero)
-                        {
-                            transform.rotation = Quaternion.Slerp(transform.rotation, 
-                                                               Quaternion.LookRotation(lookDirection), 
-                                                               10f * dt);
-                        }
-                    }
-                }
-            }
+            // Physics locomotion handles its own update via Unity lifecycle
+            // No need to manually apply movement - physics system handles it
+            
+            // Keep the basic locomotion for compatibility, but don't apply transform movement
+            // The PhysicsLocomotionController will handle all movement and jumping
             
             // Handle test inputs
             HandleTestInputs();
@@ -116,14 +100,14 @@ namespace MOBA.Demo
                     Debug.Log("DemoPlayerController: Using default game configuration");
                 }
                 
-                // Find or create tick manager
-                tickManager = FindFirstObjectByType<TickManager>();
-                if (tickManager == null)
-                {
-                    var tickManagerObj = new GameObject("TickManager");
-                    tickManager = tickManagerObj.AddComponent<TickManager>();
-                    Debug.Log("DemoPlayerController: Created TickManager");
-                }
+                // Find or create tick manager - REMOVED as part of networking cleanup
+                // tickManager = FindFirstObjectByType<TickManager>();
+                // if (tickManager == null)
+                // {
+                //     var tickManagerObj = new GameObject("TickManager");
+                //     tickManager = tickManagerObj.AddComponent<TickManager>();
+                //     Debug.Log("DemoPlayerController: Created TickManager");
+                // }
                 
                 // Create player context with demo ID
                 string playerId = $"Player_{GetInstanceID()}";
@@ -137,12 +121,46 @@ namespace MOBA.Demo
                 inputSource = new UnityInputSource(new MOBA.Input.InputSystem_Actions());
                 
                 // Initialize controllers
-                locomotion = new LocomotionController(playerContext, inputSource);
+                var unifiedLocomotion = gameObject.GetComponent<UnifiedLocomotionController>();
+                if (unifiedLocomotion == null)
+                {
+                    unifiedLocomotion = gameObject.AddComponent<UnifiedLocomotionController>();
+                }
+                unifiedLocomotion.Initialize(playerContext, inputSource);
+                locomotion = unifiedLocomotion;
+                
+                // Enhanced physics locomotion removed as part of cleanup - jump system now handled by EnhancedJumpController
+                // var physicsLocomotion = gameObject.GetComponent<PhysicsLocomotionController>();
+                
+                // Add enhanced jump controller
+                var enhancedJumpController = gameObject.GetComponent<EnhancedJumpController>();
+                if (enhancedJumpController == null)
+                {
+                    enhancedJumpController = gameObject.AddComponent<EnhancedJumpController>();
+                }
+                
+                // Movement debugger removed as part of cleanup
+                // var movementDebugger = gameObject.GetComponent<MovementDebugger>();
+                // if (movementDebugger == null)
+                // {
+                //     movementDebugger = gameObject.AddComponent<MovementDebugger>();
+                //     Debug.Log("DemoPlayerController: Added MovementDebugger component");
+                // }
+                
+                // Setup jump physics definition if using default assets
+                if (useDefaultAssets)
+                {
+                    var defaultJumpDef = gameConfig.jumpPhysics ?? DefaultAssetCreator.CreateDefaultJumpPhysics();
+                    
+                    // Jump system handled by EnhancedJumpController - no need for physics locomotion
+                    Debug.Log("DemoPlayerController: Setup enhanced jump system with default physics");
+                }
+                
                 abilities = new AbilityController(playerContext);
                 scoring = new ScoringController(playerContext);
                 
                 // Find camera controller
-                cameraController = FindFirstObjectByType<CameraController>();
+                cameraController = FindFirstObjectByType<UnifiedCameraController>();
                 
                 isInitialized = true;
                 Debug.Log($"DemoPlayerController: Successfully initialized for player {playerId}");
@@ -180,8 +198,8 @@ namespace MOBA.Demo
                 }
             }
             
-            // Toggle scoring channel for testing - E key through regular input check
-            if (UnityEngine.Input.GetKeyDown(toggleChannelKey))
+            // Toggle scoring channel for testing - E key through NEW INPUT SYSTEM
+            if (Keyboard.current != null && Keyboard.current[Key.E].wasPressedThisFrame)
             {
                 if (playerContext.carriedPoints > 0)
                 {
@@ -204,8 +222,8 @@ namespace MOBA.Demo
                 }
             }
             
-            // Simulate player death/respawn for testing camera behavior - K key
-            if (UnityEngine.Input.GetKeyDown(simulateDeathKey))
+            // Simulate player death/respawn for testing camera behavior - K key through NEW INPUT SYSTEM
+            if (Keyboard.current != null && Keyboard.current[Key.K].wasPressedThisFrame)
             {
                 if (isDead)
                 {
@@ -229,10 +247,10 @@ namespace MOBA.Demo
             {
                 // Cycle through camera modes for demo testing
                 var currentMode = cameraController.cameraMode;
-                var modes = System.Enum.GetValues(typeof(CameraController.CameraMode));
+                var modes = System.Enum.GetValues(typeof(UnifiedCameraController.CameraMode));
                 int currentIndex = System.Array.IndexOf(modes, currentMode);
                 int nextIndex = (currentIndex + 1) % modes.Length;
-                cameraController.SetCameraMode((CameraController.CameraMode)modes.GetValue(nextIndex));
+                cameraController.SetCameraMode((UnifiedCameraController.CameraMode)modes.GetValue(nextIndex));
                 Debug.Log($"Demo: Camera mode changed to: {cameraController.cameraMode}");
             }
             
@@ -249,7 +267,7 @@ namespace MOBA.Demo
             {
                 string status = $"HP: {playerContext.currentHP}/{playerContext.baseStats.MaxHP} | " +
                                $"Points: {playerContext.carriedPoints} | " +
-                               $"Energy: {playerContext.ultimateEnergy:F1}/{playerContext.ultimateDef.required} | " +
+                               $"Energy: {playerContext.ultimateEnergy:F1}/{playerContext.ultimateDef.energyRequirement} | " +
                                $"Ultimate: {(abilities.IsUltimateReady ? "READY" : "Not Ready")}";
                                
                 Debug.Log($"DemoPlayer Status: {status}");
@@ -260,6 +278,7 @@ namespace MOBA.Demo
         {
             Debug.Log("=== Demo Controls ===");
             Debug.Log("WASD: Move player");
+            Debug.Log("Space: Jump (hold for higher jump, double-tap for double jump)");
             Debug.Log("V: Hold to pan camera (release to return to player)");
             Debug.Log("Arrow Keys: Pan camera while holding V");
             Debug.Log("Right Mouse: Drag to pan camera while holding V");
@@ -271,6 +290,11 @@ namespace MOBA.Demo
             Debug.Log("Q: Basic Ability (if input connected)");
             Debug.Log("R: Ultimate Ability (if input connected and energy ready)");
             Debug.Log("C: Cycle camera modes (demo only)");
+            Debug.Log("=== Jump System ===");
+            Debug.Log("Normal jump: 1x height");
+            Debug.Log("Hold jump: 1.5x height");  
+            Debug.Log("Double jump: 2x height");
+            Debug.Log("Apex boost: 1.8x additional boost at peak");
             Debug.Log("=====================");
         }
         
@@ -333,7 +357,7 @@ namespace MOBA.Demo
             GUILayout.Label($"Player: {playerContext.playerId}");
             GUILayout.Label($"HP: {playerContext.currentHP}/{playerContext.baseStats.MaxHP}");
             GUILayout.Label($"Carried Points: {playerContext.carriedPoints}");
-            GUILayout.Label($"Ultimate Energy: {playerContext.ultimateEnergy:F1}/{playerContext.ultimateDef.required}");
+            GUILayout.Label($"Ultimate Energy: {playerContext.ultimateEnergy:F1}/{playerContext.ultimateDef.energyRequirement}");
             GUILayout.Label($"Ultimate Status: {(abilities.IsUltimateReady ? "READY" : "Charging")}");
             GUILayout.Label($"Status: <color={(isDead ? "red" : "lime")}>{(isDead ? "DEAD" : "ALIVE")}</color>");
             

@@ -16,7 +16,7 @@ namespace Tests.Editor
             var energyDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             energyDef.maxEnergy = 100f;
             energyDef.regenRate = 10f;
-            energyDef.required = 90f;
+            energyDef.energyRequirement = 90f;
             
             var baseStats = ScriptableObject.CreateInstance<BaseStatsTemplate>();
             var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();

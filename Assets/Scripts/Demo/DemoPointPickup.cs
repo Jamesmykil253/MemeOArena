@@ -1,5 +1,6 @@
 using UnityEngine;
 using MOBA.Bootstrap;
+using MOBA.Controllers;
 
 namespace MOBA.Demo
 {
@@ -37,7 +38,7 @@ namespace MOBA.Demo
             // Check if it's the player
             if (other.CompareTag("Player"))
             {
-                var player = other.GetComponent<DemoPlayerController>();
+                var player = other.GetComponent<UnifiedLocomotionController>();
                 var bootstrapper = other.GetComponent<GameBootstrapper>();
                 
                 if (player != null || bootstrapper != null)

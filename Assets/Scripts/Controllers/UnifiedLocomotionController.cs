@@ -2,69 +2,39 @@ using System;
 using UnityEngine;
 using MOBA.Core;
 using MOBA.Data;
-using MOBA.Physics;
 
 namespace MOBA.Controllers
 {
     /// <summary>
-    /// Unified locomotion controller that can work with or without physics integration.
-    /// Implements the full FSM: Grounded ↔ Airborne with Knockback/Disabled states.
-    /// Falls back to simple movement when physics system is not available.
+    /// Unified locomotion controller that handles all player movement.
+    /// Implements ILocomotionController for standardized movement API.
+    /// Integrates with CharacterController for physics-based movement.
     /// </summary>
-    public class UnifiedLocomotionController : MonoBehaviour
+    [RequireComponent(typeof(CharacterController))]
+    public class UnifiedLocomotionController : MonoBehaviour, ILocomotionController
     {
         [Header("Movement Settings")]
         [SerializeField] private float moveSpeed = 5f;
-        [SerializeField] private float jumpForce = 10f;
-        [SerializeField] private float acceleration = 20f;
-        [SerializeField] private float deceleration = 15f;
+        [SerializeField] private float jumpForce = 8f;
+        [SerializeField] private float gravity = 20f;
+        [SerializeField] private float groundCheckDistance = 0.1f;
         
-        [Header("Jump Settings")]
-        [SerializeField] private float coyoteTime = 0.1f;
-        [SerializeField] private float jumpBufferTime = 0.1f;
-        [SerializeField] private bool allowDoubleJump = false;
-        [SerializeField] private float doubleJumpForce = 8f;
+        [Header("Ground Detection")]
+        [SerializeField] private LayerMask groundLayer = 1; // Default layer
+        [SerializeField] private Transform groundCheck;
         
-        [Header("Integration")]
-        [SerializeField] private bool usePhysicsIntegration = true;
-        [SerializeField] private bool useFSMStates = true;
-        
-        // External references
-        private DeterministicPhysics physicsSystem;
+        // Component references
+        private CharacterController characterController;
         private IInputSource inputSource;
-        private StateMachine fsm;
-        private TickManager tickManager;
+        private PlayerContext playerContext;
         
-        // States (only used if useFSMStates is true)
-        private GroundedState groundedState;
-        private AirborneState airborneState;
-        private KnockbackState knockbackState;
-        private DisabledState disabledState;
-        
-        // Runtime data
-        private PlayerContext context;
-        private string physicsBodyId;
+        // Movement state
+        private Vector3 velocity;
         private Vector3 desiredVelocity;
-        private float lastGroundedTime;
-        private float jumpBufferTimer;
-        private bool hasDoubleJump;
+        private bool isGrounded;
         private bool isEnabled = true;
-        
-        // Simple mode properties (when not using physics/FSM)
-        private Vector3 simpleVelocity;
-        private bool isSimpleGrounded = true;
-        
-        // Public properties
-        public Vector3 DesiredVelocity => desiredVelocity;
-        public bool IsGrounded => usePhysicsIntegration ? 
-            (physicsSystem?.GetBody(physicsBodyId)?.isGrounded ?? isSimpleGrounded) : 
-            isSimpleGrounded;
-        public bool IsInKnockback => usePhysicsIntegration ? 
-            (physicsSystem?.GetBody(physicsBodyId)?.isInKnockback ?? false) : 
-            false;
-        public StateMachine FSM => fsm;
-        public bool IsPhysicsEnabled => usePhysicsIntegration && physicsSystem != null;
-        public bool IsFSMEnabled => useFSMStates && fsm != null;
+        private float knockbackTimer;
+        private Vector3 knockbackVelocity;
         
         // Events
         public event Action OnJump;
@@ -72,493 +42,175 @@ namespace MOBA.Controllers
         public event Action<Vector3> OnKnockbackStart;
         public event Action OnKnockbackEnd;
         
+        // Properties
+        public Vector3 DesiredVelocity => desiredVelocity;
+        public bool IsGrounded => isGrounded;
+        public float MoveSpeed 
+        { 
+            get => moveSpeed; 
+            set => moveSpeed = value; 
+        }
+        public bool IsEnabled 
+        { 
+            get => isEnabled; 
+            set => isEnabled = value; 
+        }
+        
         private void Awake()
         {
-            // Try to find physics system and tick manager
-            if (usePhysicsIntegration)
-            {
-                physicsSystem = FindFirstObjectByType<DeterministicPhysics>();
-                tickManager = FindFirstObjectByType<TickManager>();
-                
-                if (physicsSystem == null)
-                {
-                    Debug.LogWarning("UnifiedLocomotionController: DeterministicPhysics not found, using simple movement");
-                    usePhysicsIntegration = false;
-                }
-                
-                if (tickManager == null)
-                {
-                    Debug.LogWarning("UnifiedLocomotionController: TickManager not found");
-                }
-            }
+            characterController = GetComponent<CharacterController>();
             
-            // Setup FSM if enabled
-            if (useFSMStates)
+            // Create ground check if not assigned
+            if (groundCheck == null)
             {
-                SetupStateMachine();
+                var groundCheckObj = new GameObject("GroundCheck");
+                groundCheckObj.transform.SetParent(transform);
+                groundCheckObj.transform.localPosition = Vector3.down * (characterController.height / 2f);
+                groundCheck = groundCheckObj.transform;
             }
         }
         
-        private void Start()
+        public void Initialize(PlayerContext playerContext, IInputSource inputSource)
         {
-            // Register physics body if using physics
-            if (usePhysicsIntegration && physicsSystem != null)
-            {
-                RegisterPhysicsBody();
-            }
-            
-            // Start FSM if enabled
-            if (useFSMStates && fsm != null && groundedState != null)
-            {
-                fsm.Change(groundedState, "Initial state");
-            }
+            this.playerContext = playerContext;
+            this.inputSource = inputSource;
         }
         
-        /// <summary>
-        /// Initialize the controller with context and input source
-        /// </summary>
-        public void Initialize(PlayerContext playerContext, IInputSource input)
-        {
-            context = playerContext;
-            inputSource = input;
-            
-            if (playerContext != null)
-            {
-                physicsBodyId = playerContext.playerId + "_body";
-                
-                // Update move speed from context
-                if (playerContext.baseStats != null)
-                {
-                    moveSpeed = playerContext.baseStats.MoveSpeed;
-                }
-            }
-        }
-        
-        private void SetupStateMachine()
-        {
-            if (context != null)
-            {
-                fsm = new StateMachine("LocomotionFSM", context.playerId);
-            }
-            else
-            {
-                fsm = new StateMachine("LocomotionFSM", "unknown");
-            }
-            
-            // Create states
-            groundedState = new GroundedState(this);
-            airborneState = new AirborneState(this);
-            knockbackState = new KnockbackState(this);
-            disabledState = new DisabledState(this);
-        }
-        
-        private void RegisterPhysicsBody()
-        {
-            if (physicsSystem == null || string.IsNullOrEmpty(physicsBodyId)) 
-            {
-                return;
-            }
-            
-            PhysicsBodySettings settings = PhysicsBodySettings.Default;
-            settings.mass = 1f;
-            settings.useGravity = true;
-            
-            physicsSystem.RegisterBody(physicsBodyId, transform.position, Vector3.zero, settings);
-        }
-        
-        public void Update()
+        private void Update()
         {
             Tick(Time.deltaTime);
         }
         
-        public void Tick(float dt)
-        {
-            // Update timers
-            UpdateTimers(dt);
-            
-            // Process input
-            ProcessInput();
-            
-            // Update FSM if enabled
-            if (useFSMStates && fsm != null)
-            {
-                fsm.Update(dt);
-            }
-            
-            // Apply movement
-            ApplyMovement(dt);
-            
-            // Sync transform
-            if (usePhysicsIntegration)
-            {
-                SyncTransformWithPhysics();
-            }
-        }
-        
-        /// <summary>
-        /// Public method for external update calls (matches simple LocomotionController interface)
-        /// This allows the controller to be used without MonoBehaviour if needed
-        /// </summary>
-        public void UpdateController(float dt)
-        {
-            Tick(dt);
-        }
-        
-        /// <summary>
-        /// Compatibility method for existing LocomotionController interface
-        /// </summary>
-        public void UpdateController()
-        {
-            UpdateController(Time.deltaTime);
-        }
-        
-        private void UpdateTimers(float dt)
-        {
-            // Update jump buffer timer
-            if (jumpBufferTimer > 0f)
-            {
-                jumpBufferTimer -= dt;
-            }
-            
-            // Update coyote time
-            if (!IsGrounded)
-            {
-                lastGroundedTime += dt;
-            }
-            else
-            {
-                lastGroundedTime = 0f;
-            }
-        }
-        
-        private void ProcessInput()
-        {
-            if (inputSource == null || !isEnabled) 
-            {
-                desiredVelocity = Vector3.zero;
-                return;
-            }
-            
-            // Get movement input
-            float horizontal = inputSource.GetHorizontal();
-            float vertical = inputSource.GetVertical();
-            Vector2 moveInput = new Vector2(horizontal, vertical);
-            
-            // Apply deadzone
-            if (moveInput.magnitude < 0.1f)
-            {
-                moveInput = Vector2.zero;
-            }
-            
-            // Calculate desired velocity
-            Vector3 worldInput = new Vector3(moveInput.x, 0f, moveInput.y);
-            desiredVelocity = worldInput.normalized * moveSpeed;
-            
-            // Check for jump input
-            if (inputSource.IsJumpPressed())
-            {
-                jumpBufferTimer = jumpBufferTime;
-            }
-        }
-        
-        private void ApplyMovement(float dt)
+        public void Tick(float deltaTime)
         {
             if (!isEnabled) return;
             
-            if (usePhysicsIntegration && physicsSystem != null)
+            UpdateGroundCheck();
+            HandleMovementInput(deltaTime);
+            HandleKnockback(deltaTime);
+            ApplyMovement(deltaTime);
+        }
+        
+        private void UpdateGroundCheck()
+        {
+            bool wasGrounded = isGrounded;
+            isGrounded = Physics.CheckSphere(groundCheck.position, groundCheckDistance, groundLayer);
+            
+            // Landing event
+            if (isGrounded && !wasGrounded)
             {
-                ApplyPhysicsMovement();
-            }
-            else
-            {
-                ApplySimpleMovement(dt);
+                OnLand?.Invoke();
             }
         }
         
-        private void ApplyPhysicsMovement()
+        private void HandleMovementInput(float deltaTime)
         {
-            PhysicsBody body = physicsSystem.GetBody(physicsBodyId);
-            if (body == null) return;
+            if (inputSource == null) return;
             
-            // Don't override movement during knockback
-            if (body.isInKnockback) return;
+            // Get movement input
+            Vector2 moveInput = inputSource.GetMoveVector();
+            
+            // Convert to world space movement
+            Vector3 moveDirection = new Vector3(moveInput.x, 0f, moveInput.y);
+            
+            // Apply camera-relative movement (if camera exists)
+            UnityEngine.Camera mainCamera = UnityEngine.Camera.main;
+            if (mainCamera != null)
+            {
+                var cameraTransform = mainCamera.transform;
+                var forward = cameraTransform.forward;
+                var right = cameraTransform.right;
+                
+                forward.y = 0f;
+                right.y = 0f;
+                forward.Normalize();
+                right.Normalize();
+                
+                moveDirection = (forward * moveInput.y + right * moveInput.x).normalized;
+            }
+            
+            // Calculate desired velocity
+            desiredVelocity = moveDirection * moveSpeed;
             
             // Apply horizontal movement
-            Vector3 currentVel = body.velocity;
-            Vector3 targetHorizontalVel = new Vector3(desiredVelocity.x, 0f, desiredVelocity.z);
-            Vector3 currentHorizontalVel = new Vector3(currentVel.x, 0f, currentVel.z);
+            velocity.x = desiredVelocity.x;
+            velocity.z = desiredVelocity.z;
             
-            // Lerp toward target velocity
-            float lerpSpeed = desiredVelocity.magnitude > 0.1f ? acceleration : deceleration;
-            Vector3 newHorizontalVel = Vector3.Lerp(currentHorizontalVel, targetHorizontalVel, 
-                                                   lerpSpeed * Time.deltaTime);
-            
-            // Maintain vertical velocity
-            Vector3 newVelocity = new Vector3(newHorizontalVel.x, currentVel.y, newHorizontalVel.z);
-            physicsSystem.SetBodyVelocity(physicsBodyId, newVelocity);
+            // Handle jump input
+            if (inputSource.IsJumpPressed())
+            {
+                TryJump();
+            }
         }
         
-        private void ApplySimpleMovement(float dt)
+        private void HandleKnockback(float deltaTime)
         {
-            // Simple movement (fallback when physics not available)
-            if (desiredVelocity.magnitude > 0.01f)
+            if (knockbackTimer > 0f)
             {
-                // Apply movement directly to transform
-                transform.position += desiredVelocity * dt;
+                knockbackTimer -= deltaTime;
                 
-                // Rotate to face movement direction
-                Vector3 lookDirection = desiredVelocity.normalized;
-                lookDirection.y = 0; // Keep on horizontal plane
-                if (lookDirection != Vector3.zero)
+                // Apply knockback velocity
+                velocity = Vector3.Lerp(velocity, knockbackVelocity, deltaTime * 10f);
+                
+                if (knockbackTimer <= 0f)
                 {
-                    transform.rotation = Quaternion.Slerp(transform.rotation, 
-                                                       Quaternion.LookRotation(lookDirection), 
-                                                       10f * dt);
+                    knockbackVelocity = Vector3.zero;
+                    OnKnockbackEnd?.Invoke();
                 }
             }
         }
         
-        private void SyncTransformWithPhysics()
+        private void ApplyMovement(float deltaTime)
         {
-            if (physicsSystem == null) return;
-            
-            PhysicsBody body = physicsSystem.GetBody(physicsBodyId);
-            if (body != null)
+            // Apply gravity
+            if (!isGrounded)
             {
-                transform.position = body.position;
+                velocity.y -= gravity * deltaTime;
             }
+            else if (velocity.y < 0f)
+            {
+                velocity.y = -2f; // Small downward force to keep grounded
+            }
+            
+            // Move the character
+            characterController.Move(velocity * deltaTime);
         }
         
-        /// <summary>
-        /// Attempt to jump
-        /// </summary>
         public void TryJump()
         {
-            bool canJump = false;
+            if (!isEnabled || !isGrounded) return;
             
-            if (IsGrounded || lastGroundedTime <= coyoteTime)
-            {
-                // Regular jump
-                canJump = true;
-                hasDoubleJump = allowDoubleJump;
-            }
-            else if (allowDoubleJump && hasDoubleJump)
-            {
-                // Double jump
-                canJump = true;
-                hasDoubleJump = false;
-            }
-            
-            if (canJump)
-            {
-                PerformJump();
-            }
-        }
-        
-        private void PerformJump()
-        {
-            float jumpVelocity = hasDoubleJump && !IsGrounded ? doubleJumpForce : jumpForce;
-            
-            if (usePhysicsIntegration && physicsSystem != null)
-            {
-                Vector3 jumpImpulse = Vector3.up * jumpVelocity;
-                physicsSystem.ApplyImpulse(physicsBodyId, jumpImpulse);
-            }
-            else
-            {
-                // Simple jump - just set upward velocity
-                simpleVelocity.y = jumpVelocity;
-                isSimpleGrounded = false;
-            }
-            
-            jumpBufferTimer = 0f;
+            velocity.y = jumpForce;
             OnJump?.Invoke();
-            
-            if (useFSMStates && fsm != null && airborneState != null)
-            {
-                fsm.Change(airborneState, "Jump");
-            }
         }
         
-        /// <summary>
-        /// Apply knockback force
-        /// </summary>
         public void ApplyKnockback(Vector3 direction, float force, float duration)
         {
-            if (usePhysicsIntegration && physicsSystem != null)
-            {
-                physicsSystem.ApplyKnockback(physicsBodyId, direction, force, duration);
-            }
-            
-            if (useFSMStates && fsm != null && knockbackState != null)
-            {
-                fsm.Change(knockbackState, "Knockback applied");
-            }
-            
+            knockbackVelocity = direction.normalized * force;
+            knockbackTimer = duration;
             OnKnockbackStart?.Invoke(direction);
         }
         
-        /// <summary>
-        /// Enable/disable locomotion (for abilities, etc.)
-        /// </summary>
-        public void SetEnabled(bool enabled)
-        {
-            isEnabled = enabled;
-            
-            if (useFSMStates && fsm != null)
-            {
-                if (enabled)
-                {
-                    IState nextState = IsGrounded ? 
-                        (IState)groundedState : 
-                        airborneState;
-                    fsm.Change(nextState, "Enabled");
-                }
-                else if (disabledState != null)
-                {
-                    fsm.Change(disabledState, "Disabled");
-                }
-            }
-        }
-        
-        #region State Classes
-        
-        private class GroundedState : IState
-        {
-            private readonly UnifiedLocomotionController controller;
-            
-            public GroundedState(UnifiedLocomotionController ctrl)
-            {
-                controller = ctrl;
-            }
-            
-            public void Enter()
-            {
-                controller.hasDoubleJump = controller.allowDoubleJump;
-                controller.OnLand?.Invoke();
-            }
-            
-            public void Exit() { }
-            
-            public void Tick(float dt)
-            {
-                // Check for jump input
-                if (controller.jumpBufferTimer > 0f)
-                {
-                    controller.TryJump();
-                }
-                
-                // Check if we've left the ground
-                if (!controller.IsGrounded)
-                {
-                    controller.fsm.Change(controller.airborneState, "Left ground");
-                }
-                
-                // Check for knockback
-                if (controller.IsInKnockback)
-                {
-                    controller.fsm.Change(controller.knockbackState, "Knockback started");
-                }
-            }
-        }
-        
-        private class AirborneState : IState
-        {
-            private readonly UnifiedLocomotionController controller;
-            
-            public AirborneState(UnifiedLocomotionController ctrl)
-            {
-                controller = ctrl;
-            }
-            
-            public void Enter() { }
-            
-            public void Exit() { }
-            
-            public void Tick(float dt)
-            {
-                // Check for jump input (double jump)
-                if (controller.jumpBufferTimer > 0f)
-                {
-                    controller.TryJump();
-                }
-                
-                // Check if we've landed
-                if (controller.IsGrounded)
-                {
-                    controller.fsm.Change(controller.groundedState, "Landed");
-                }
-                
-                // Check for knockback
-                if (controller.IsInKnockback)
-                {
-                    controller.fsm.Change(controller.knockbackState, "Knockback started");
-                }
-            }
-        }
-        
-        private class KnockbackState : IState
-        {
-            private readonly UnifiedLocomotionController controller;
-            
-            public KnockbackState(UnifiedLocomotionController ctrl)
-            {
-                controller = ctrl;
-            }
-            
-            public void Enter() { }
-            
-            public void Exit()
-            {
-                controller.OnKnockbackEnd?.Invoke();
-            }
-            
-            public void Tick(float dt)
-            {
-                // Check if knockback has ended
-                if (!controller.IsInKnockback)
-                {
-                    // Return to appropriate state
-                    IState nextState = controller.IsGrounded ? 
-                        (IState)controller.groundedState : 
-                        controller.airborneState;
-                    controller.fsm.Change(nextState, "Knockback ended");
-                }
-            }
-        }
-        
-        private class DisabledState : IState
-        {
-            private readonly UnifiedLocomotionController controller;
-            
-            public DisabledState(UnifiedLocomotionController ctrl)
-            {
-                controller = ctrl;
-            }
-            
-            public void Enter()
-            {
-                // Stop movement
-                controller.desiredVelocity = Vector3.zero;
-            }
-            
-            public void Exit() { }
-            
-            public void Tick(float dt)
-            {
-                // Don't process input while disabled
-                // External code must call SetEnabled(true) to exit this state
-            }
-        }
-        
-        #endregion
-        
         private void OnDestroy()
         {
-            if (physicsSystem != null && !string.IsNullOrEmpty(physicsBodyId))
+            // No input event cleanup needed since we poll input rather than subscribe to events
+        }
+        
+        private void OnDrawGizmosSelected()
+        {
+            if (groundCheck != null)
             {
-                physicsSystem.UnregisterBody(physicsBodyId);
+                Gizmos.color = isGrounded ? Color.green : Color.red;
+                Gizmos.DrawWireSphere(groundCheck.position, groundCheckDistance);
             }
+            
+            // Draw desired velocity
+            Gizmos.color = Color.blue;
+            Gizmos.DrawLine(transform.position, transform.position + desiredVelocity);
+            
+            // Draw actual velocity
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(transform.position, transform.position + velocity);
         }
     }
 }

@@ -9,49 +9,51 @@ namespace Tests.PlayMode
     public class PhysicsTests
     {
         [Test]
-        public void PhysicsBodySettingsHaveDefaultValues()
+        public void UnityPhysicsSettingsWork()
         {
-            var settings = MOBA.Physics.PhysicsBodySettings.Default;
+            // Test Unity's default rigidbody settings
+            var testGO = new GameObject("PhysicsTest");
+            var rb = testGO.AddComponent<Rigidbody>();
             
-            Assert.AreEqual(1f, settings.mass);
-            Assert.IsTrue(settings.useGravity);
-            Assert.IsFalse(settings.isKinematic);
-            Assert.AreEqual(0f, settings.drag);
-            Assert.AreEqual(0f, settings.angularDrag);
+            Assert.AreEqual(1f, rb.mass);
+            Assert.IsTrue(rb.useGravity);
+            Assert.IsFalse(rb.isKinematic);
+            Assert.AreEqual(0f, rb.linearDamping);
+            Assert.AreEqual(0f, rb.angularDamping);
+            
+            UnityEngine.Object.DestroyImmediate(testGO);
         }
         
         [Test]
-        public void PhysicsBodyInitializationWorks()
+        public void UnityRigidbodyInitializationWorks()
         {
-            var body = new MOBA.Physics.PhysicsBody();
-            body.id = "test_body";
+            var testGO = new GameObject("PhysicsTest");
+            var body = testGO.AddComponent<Rigidbody>();
+            
             body.position = new Vector3(1f, 2f, 3f);
-            body.velocity = new Vector3(0.5f, 0f, 0.2f);
-            body.isGrounded = true;
-            body.isInKnockback = false;
+            body.linearVelocity = new Vector3(0.5f, 0f, 0.2f);
             
-            Assert.AreEqual("test_body", body.id);
             Assert.AreEqual(new Vector3(1f, 2f, 3f), body.position);
-            Assert.AreEqual(new Vector3(0.5f, 0f, 0.2f), body.velocity);
-            Assert.IsTrue(body.isGrounded);
-            Assert.IsFalse(body.isInKnockback);
+            Assert.AreEqual(new Vector3(0.5f, 0f, 0.2f), body.linearVelocity);
+            
+            UnityEngine.Object.DestroyImmediate(testGO);
         }
         
         [Test]
-        public void KnockbackStateTracking()
+        public void UnityRigidbodyKnockbackSimulation()
         {
-            var body = new MOBA.Physics.PhysicsBody();
-            body.knockbackDirection = Vector3.forward;
-            body.knockbackForce = 10f;
-            body.knockbackDuration = 0.5f;
-            body.knockbackTimer = 0.3f;
-            body.isInKnockback = true;
+            var testGO = new GameObject("KnockbackTest");
+            var body = testGO.AddComponent<Rigidbody>();
             
-            Assert.AreEqual(Vector3.forward, body.knockbackDirection);
-            Assert.AreEqual(10f, body.knockbackForce);
-            Assert.AreEqual(0.5f, body.knockbackDuration);
-            Assert.AreEqual(0.3f, body.knockbackTimer);
-            Assert.IsTrue(body.isInKnockback);
+            // Simulate knockback by applying force
+            Vector3 knockbackDirection = Vector3.forward;
+            float knockbackForce = 10f;
+            
+            body.AddForce(knockbackDirection * knockbackForce, ForceMode.Impulse);
+            
+            Assert.AreEqual(Vector3.forward * knockbackForce, body.linearVelocity);
+            
+            UnityEngine.Object.DestroyImmediate(testGO);
         }
         
         [Test]

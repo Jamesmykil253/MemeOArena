@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using MOBA.Core;
 using MOBA.Networking;
-using MOBA.Telemetry;
 
 namespace MOBA.Input
 {
@@ -39,8 +38,8 @@ namespace MOBA.Input
         public static event Action<Vector2> OnMovementInput; // movement vector
         
         private IInputSource inputSource;
-        private TickManager tickManager;
         private UnityEngine.Camera playerCamera;
+        private TickManager tickManager;
         
         public Vector2 CurrentMoveInput => currentMoveInput;
         public Vector2 SmoothedMoveInput => smoothedMoveInput;
@@ -62,7 +61,7 @@ namespace MOBA.Input
                 TickManager.OnTick += OnTick;
             }
             
-            GameLogger.LogGameplayEvent(0, "INPUT", "INIT", "Input manager initialized");
+            
         }
         
         private void InitializeButtonStates()
@@ -81,9 +80,7 @@ namespace MOBA.Input
         public void SetInputSource(IInputSource source)
         {
             inputSource = source;
-            
-            GameLogger.LogGameplayEvent(tickManager?.CurrentTick ?? 0, "INPUT", "SOURCE_SET", 
-                source?.GetType().Name ?? "null");
+            Debug.Log($"[INPUT_MANAGER] Input source set to: {source?.GetType().Name ?? "null"}");
         }
         
         private void Update()
@@ -162,7 +159,7 @@ namespace MOBA.Input
                 BufferInput(buttonName, true);
                 OnButtonPressed?.Invoke(buttonName);
                 
-                GameLogger.LogGameplayEvent(tickManager.CurrentTick, "INPUT", "BUTTON_PRESS", buttonName);
+                
             }
             else if (!isPressed && wasPressed)
             {
@@ -230,7 +227,7 @@ namespace MOBA.Input
                 Vector2 assistedInput = new Vector2(assistedDirection.x, assistedDirection.z);
                 assistedInput = assistedInput.normalized * input.magnitude;
                 
-                GameMetrics.Instance.RecordMetric("input_aim_assist_applied", 1);
+                
                 
                 return assistedInput;
             }
@@ -306,11 +303,10 @@ namespace MOBA.Input
             // Log significant inputs
             if (inputToUse.magnitude > 0.1f || jumpPressed || ability1Pressed || ability2Pressed || ultimatePressed)
             {
-                GameLogger.LogGameplayEvent(tick, "INPUT", "CMD_GENERATED", 
-                    $"Seq:{inputSequence} Move:{inputToUse} Buttons:{GetButtonString(inputCmd)}");
+                Debug.Log($"[INPUT_MANAGER] Input generated - Seq:{inputSequence} Move:{inputToUse} Buttons:{GetButtonString(inputCmd)}");
             }
             
-            GameMetrics.Instance.RecordMetric("input_commands_generated", 1);
+            
         }
         
         private bool IsButtonBuffered(string buttonName)
@@ -327,15 +323,18 @@ namespace MOBA.Input
             return false;
         }
         
+        // Reusable list to avoid allocations
+        private readonly List<string> _pressedButtonsCache = new List<string>();
+        
         private string GetButtonString(InputCmd cmd)
         {
-            List<string> pressedButtons = new List<string>();
-            if (cmd.jumpPressed) pressedButtons.Add("J");
-            if (cmd.ability1Pressed) pressedButtons.Add("A1");
-            if (cmd.ability2Pressed) pressedButtons.Add("A2");
-            if (cmd.ultimatePressed) pressedButtons.Add("U");
-            if (cmd.scoringPressed) pressedButtons.Add("S");
-            return string.Join(",", pressedButtons);
+            _pressedButtonsCache.Clear();
+            if (cmd.jumpPressed) _pressedButtonsCache.Add("J");
+            if (cmd.ability1Pressed) _pressedButtonsCache.Add("A1");
+            if (cmd.ability2Pressed) _pressedButtonsCache.Add("A2");
+            if (cmd.ultimatePressed) _pressedButtonsCache.Add("U");
+            if (cmd.scoringPressed) _pressedButtonsCache.Add("S");
+            return string.Join(",", _pressedButtonsCache);
         }
         
         /// <summary>
@@ -360,7 +359,7 @@ namespace MOBA.Input
         public void ClearInputBuffer()
         {
             inputBuffer.Clear();
-            GameLogger.LogGameplayEvent(tickManager.CurrentTick, "INPUT", "BUFFER_CLEARED", "");
+            
         }
         
         /// <summary>

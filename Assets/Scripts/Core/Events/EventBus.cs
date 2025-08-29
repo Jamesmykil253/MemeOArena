@@ -1,262 +1,151 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
+using MOBA.Core.Events;
 
 namespace MOBA.Core.Events
 {
     /// <summary>
-    /// Enterprise-grade event system with type safety and zero allocation.
-    /// PhD-level: Implements lock-free concurrent event dispatch with automatic cleanup.
-    /// Eliminates coupling between systems while maintaining performance.
+    /// Enterprise event bus system for decoupled game architecture.
+    /// Provides asynchronous event publishing and subscription.
     /// </summary>
     public static class EventBus
     {
-        // Thread-safe event storage
-        private static readonly ConcurrentDictionary<Type, ConcurrentBag<IEventHandler>> _handlers = new();
-        private static readonly ConcurrentQueue<IGameEvent> _eventQueue = new();
-        private static readonly object _processingLock = new();
-        
-        // Performance metrics
-        private static int _eventsProcessed = 0;
-        private static int _handlersRegistered = 0;
+        private static Dictionary<Type, List<object>> subscribers = new Dictionary<Type, List<object>>();
+        private static Queue<IGameEvent> eventQueue = new Queue<IGameEvent>();
+        private static bool isProcessing = false;
         
         /// <summary>
-        /// Subscribe to events of type T. Thread-safe.
+        /// Subscribe to events of type T
         /// </summary>
         public static void Subscribe<T>(Action<T> handler) where T : IGameEvent
         {
-            if (handler == null) return;
-            
             var eventType = typeof(T);
-            var wrapper = new EventHandler<T>(handler);
             
-            _handlers.AddOrUpdate(
-                eventType,
-                new ConcurrentBag<IEventHandler> { wrapper },
-                (key, bag) => { bag.Add(wrapper); return bag; }
-            );
+            if (!subscribers.ContainsKey(eventType))
+            {
+                subscribers[eventType] = new List<object>();
+            }
             
-            _handlersRegistered++;
+            subscribers[eventType].Add(handler);
         }
         
         /// <summary>
-        /// Unsubscribe from events. Thread-safe but expensive - use sparingly.
+        /// Unsubscribe from events of type T
         /// </summary>
         public static void Unsubscribe<T>(Action<T> handler) where T : IGameEvent
         {
-            if (handler == null) return;
-            
             var eventType = typeof(T);
-            if (!_handlers.TryGetValue(eventType, out var bag)) return;
             
-            // Note: ConcurrentBag doesn't support removal, so we recreate
-            var newBag = new ConcurrentBag<IEventHandler>();
-            foreach (var h in bag)
+            if (subscribers.ContainsKey(eventType))
             {
-                if (h is EventHandler<T> typed && !ReferenceEquals(typed.Handler, handler))
+                subscribers[eventType].Remove(handler);
+                
+                if (subscribers[eventType].Count == 0)
                 {
-                    newBag.Add(h);
+                    subscribers.Remove(eventType);
                 }
             }
-            
-            _handlers.TryUpdate(eventType, newBag, bag);
         }
-
+        
         /// <summary>
-        /// Publish event immediately (synchronous). Use for critical game state changes.
+        /// Publish an event immediately
         /// </summary>
         public static void Publish<T>(T gameEvent) where T : IGameEvent
         {
-            if (gameEvent == null) return;
-            
             var eventType = typeof(T);
-            if (!_handlers.TryGetValue(eventType, out var handlers)) return;
             
-            foreach (var handler in handlers)
+            if (subscribers.ContainsKey(eventType))
             {
-                try
+                foreach (var subscriber in subscribers[eventType])
                 {
-                    handler.Handle(gameEvent);
-                    _eventsProcessed++;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Event handler error for {eventType.Name}: {ex}");
+                    if (subscriber is Action<T> action)
+                    {
+                        try
+                        {
+                            action.Invoke(gameEvent);
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogError($"[EventBus] Error handling event {eventType.Name}: {e.Message}");
+                        }
+                    }
                 }
             }
         }
-
+        
         /// <summary>
-        /// Queue event for next frame processing (asynchronous). Better for performance.
+        /// Queue an event for asynchronous processing
         /// </summary>
         public static void PublishAsync<T>(T gameEvent) where T : IGameEvent
         {
-            if (gameEvent == null) return;
-            _eventQueue.Enqueue(gameEvent);
+            eventQueue.Enqueue(gameEvent);
         }
-
+        
         /// <summary>
-        /// Process all queued events. Call this once per frame from GameManager.
+        /// Process all queued events
         /// </summary>
         public static void ProcessQueuedEvents()
         {
-            if (_eventQueue.IsEmpty) return;
+            if (isProcessing) return;
             
-            lock (_processingLock)
+            isProcessing = true;
+            
+            try
             {
-                while (_eventQueue.TryDequeue(out var gameEvent))
+                while (eventQueue.Count > 0)
                 {
-                    try
+                    var gameEvent = eventQueue.Dequeue();
+                    var eventType = gameEvent.GetType();
+                    
+                    if (subscribers.ContainsKey(eventType))
                     {
-                        PublishInternal(gameEvent);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"Queued event processing error: {ex}");
+                        foreach (var subscriber in subscribers[eventType])
+                        {
+                            try
+                            {
+                                var method = subscriber.GetType().GetMethod("Invoke");
+                                method?.Invoke(subscriber, new object[] { gameEvent });
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError($"[EventBus] Error processing queued event {eventType.Name}: {e.Message}");
+                            }
+                        }
                     }
                 }
             }
-        }
-
-        private static void PublishInternal(IGameEvent gameEvent)
-        {
-            var eventType = gameEvent.GetType();
-            if (!_handlers.TryGetValue(eventType, out var handlers)) return;
-            
-            foreach (var handler in handlers)
+            finally
             {
-                handler.Handle(gameEvent);
-                _eventsProcessed++;
+                isProcessing = false;
             }
         }
-
+        
         /// <summary>
-        /// Clear all event handlers - use for scene transitions.
+        /// Clear all subscribers and queued events
         /// </summary>
         public static void Clear()
         {
-            _handlers.Clear();
-            
-            // Clear remaining queued events
-            while (_eventQueue.TryDequeue(out _)) { }
-            
-            _handlersRegistered = 0;
+            subscribers.Clear();
+            eventQueue.Clear();
         }
-
+        
         /// <summary>
-        /// Get performance statistics for debugging.
+        /// Get the number of subscribers for an event type
         /// </summary>
-        public static (int EventsProcessed, int HandlersRegistered, int QueuedEvents) GetStatistics()
+        public static int GetSubscriberCount<T>() where T : IGameEvent
         {
-            return (_eventsProcessed, _handlersRegistered, _eventQueue.Count);
-        }
-    }
-
-    // Event system interfaces and base classes
-    public interface IGameEvent
-    {
-        uint Tick { get; }
-        string EventId { get; }
-    }
-
-    public interface IEventHandler
-    {
-        void Handle(IGameEvent gameEvent);
-    }
-
-    internal class EventHandler<T> : IEventHandler where T : IGameEvent
-    {
-        public Action<T> Handler { get; }
-        
-        public EventHandler(Action<T> handler)
-        {
-            Handler = handler;
+            var eventType = typeof(T);
+            return subscribers.ContainsKey(eventType) ? subscribers[eventType].Count : 0;
         }
         
-        public void Handle(IGameEvent gameEvent)
+        /// <summary>
+        /// Get the number of queued events
+        /// </summary>
+        public static int GetQueuedEventCount()
         {
-            if (gameEvent is T typedEvent)
-            {
-                Handler(typedEvent);
-            }
-        }
-    }
-
-    // Common game events
-    [Serializable]
-    public struct PlayerSpawnedEvent : IGameEvent
-    {
-        public uint Tick { get; }
-        public string EventId { get; }
-        public string PlayerId { get; }
-        public Vector3 Position { get; }
-        
-        public PlayerSpawnedEvent(uint tick, string playerId, Vector3 position)
-        {
-            Tick = tick;
-            EventId = Guid.NewGuid().ToString();
-            PlayerId = playerId;
-            Position = position;
-        }
-    }
-
-    [Serializable]
-    public struct AbilityUsedEvent : IGameEvent
-    {
-        public uint Tick { get; }
-        public string EventId { get; }
-        public string PlayerId { get; }
-        public string AbilityId { get; }
-        public Vector3 TargetPosition { get; }
-        
-        public AbilityUsedEvent(uint tick, string playerId, string abilityId, Vector3 targetPos)
-        {
-            Tick = tick;
-            EventId = Guid.NewGuid().ToString();
-            PlayerId = playerId;
-            AbilityId = abilityId;
-            TargetPosition = targetPos;
-        }
-    }
-
-    [Serializable]
-    public struct PlayerDamagedEvent : IGameEvent
-    {
-        public uint Tick { get; }
-        public string EventId { get; }
-        public string AttackerId { get; }
-        public string VictimId { get; }
-        public float Damage { get; }
-        public bool WasKilled { get; }
-        
-        public PlayerDamagedEvent(uint tick, string attackerId, string victimId, float damage, bool wasKilled)
-        {
-            Tick = tick;
-            EventId = Guid.NewGuid().ToString();
-            AttackerId = attackerId;
-            VictimId = victimId;
-            Damage = damage;
-            WasKilled = wasKilled;
-        }
-    }
-
-    [Serializable]
-    public struct PointsScoredEvent : IGameEvent
-    {
-        public uint Tick { get; }
-        public string EventId { get; }
-        public string PlayerId { get; }
-        public int PointsScored { get; }
-        public float ChannelTime { get; }
-        
-        public PointsScoredEvent(uint tick, string playerId, int points, float channelTime)
-        {
-            Tick = tick;
-            EventId = Guid.NewGuid().ToString();
-            PlayerId = playerId;
-            PointsScored = points;
-            ChannelTime = channelTime;
+            return eventQueue.Count;
         }
     }
 }

@@ -26,9 +26,8 @@ namespace MOBA.Demo
         [SerializeField] private Vector2 groundSize = new Vector2(50f, 50f);
         
         // System references
-        private DemoPlayerController player;
-        private CameraController cameraController;
-        private TickManager tickManager;
+        private GameObject player;
+        private UnifiedCameraController unifiedCameraController;
         private GameObject environment;
         
         void Start()
@@ -44,8 +43,8 @@ namespace MOBA.Demo
         {
             Debug.Log("=== Setting up Comprehensive MOBA Demo ===");
             
-            // Step 1: Create core managers
-            CreateTickManager();
+            // Step 1: Create core managers (tick manager removed)
+            // CreateTickManager();
             
             // Step 2: Create environment
             if (createEnvironment)
@@ -73,16 +72,7 @@ namespace MOBA.Demo
             }
         }
         
-        private void CreateTickManager()
-        {
-            tickManager = FindFirstObjectByType<TickManager>();
-            if (tickManager == null)
-            {
-                GameObject tickObj = new GameObject("TickManager");
-                tickManager = tickObj.AddComponent<TickManager>();
-                Debug.Log("✓ Created TickManager for deterministic simulation");
-            }
-        }
+        // Removed CreateTickManager method as part of networking system cleanup
         
         private void CreateDemoEnvironment()
         {
@@ -173,7 +163,12 @@ namespace MOBA.Demo
         private void CreateDemoPlayer()
         {
             // Find existing player or create new one
-            player = FindFirstObjectByType<DemoPlayerController>();
+            // Find existing player object
+            var existingPlayer = FindFirstObjectByType<UnifiedLocomotionController>();
+            if (existingPlayer != null)
+            {
+                player = existingPlayer.gameObject;
+            }
             
             if (player == null)
             {
@@ -202,7 +197,10 @@ namespace MOBA.Demo
                 DestroyImmediate(visualMesh.GetComponent<CapsuleCollider>());
                 
                 // Add the demo player controller
-                player = playerObj.AddComponent<DemoPlayerController>();
+                // Set up simple player object with unified controllers
+                var unifiedLocomotion = playerObj.AddComponent<UnifiedLocomotionController>();
+                var enhancedJump = playerObj.AddComponent<EnhancedJumpController>();
+                player = playerObj;
                 
                 // Tag as player for camera system
                 playerObj.tag = "Player";
@@ -225,18 +223,19 @@ namespace MOBA.Demo
                 camObj.AddComponent<AudioListener>();
             }
             
-            // Add camera controller
-            cameraController = mainCam.GetComponent<CameraController>();
-            if (cameraController == null)
+            // Add camera controller (unified only - simplified)
+            unifiedCameraController = mainCam.GetComponent<UnifiedCameraController>();
+            
+            if (unifiedCameraController == null)
             {
-                cameraController = mainCam.gameObject.AddComponent<CameraController>();
+                unifiedCameraController = mainCam.gameObject.AddComponent<UnifiedCameraController>();
             }
             
             // Configure camera
-            cameraController.SetTarget(player.transform);
-            cameraController.SetCameraMode(CameraController.CameraMode.ThirdPerson);
-            cameraController.followSpeed = 8f;
-            cameraController.rotationSpeed = 5f;
+            unifiedCameraController.SetTarget(player.transform);
+            unifiedCameraController.SetCameraMode(UnifiedCameraController.CameraMode.ThirdPerson);
+            unifiedCameraController.followSpeed = 8f;
+            unifiedCameraController.rotationSpeed = 5f;
             
             // Position camera for good initial view
             mainCam.transform.position = playerSpawnPosition + new Vector3(0f, 8f, -6f);
@@ -268,7 +267,7 @@ namespace MOBA.Demo
         private void FinalizeDemo()
         {
             // Ensure player is properly initialized
-            if (player != null && player.enabled)
+            if (player != null && player.activeInHierarchy)
             {
                 // Player will initialize itself in Awake/Start
                 Debug.Log("✓ Player systems initializing...");
@@ -379,7 +378,7 @@ namespace MOBA.Demo
             GUILayout.Space(5);
             GUILayout.Label($"Systems Status:");
             GUILayout.Label($"Player: {(player ? "✓" : "✗")}");
-            GUILayout.Label($"Camera: {(cameraController ? "✓" : "✗")}");
+            GUILayout.Label($"Camera: {(unifiedCameraController ? "✓" : "✗")}");
             GUILayout.Label($"Environment: {(environment ? "✓" : "✗")}");
             
             GUILayout.EndVertical();

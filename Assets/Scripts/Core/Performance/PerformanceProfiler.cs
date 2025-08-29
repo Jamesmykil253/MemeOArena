@@ -1,395 +1,412 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using UnityEngine;
-using Unity.Profiling;
-using MOBA.Core.Events;
+using UnityEngine.Profiling;
 
 namespace MOBA.Core.Performance
 {
     /// <summary>
-    /// Enterprise-grade performance profiler with automatic optimization suggestions.
-    /// PhD-level: Uses Unity Profiler API with custom metrics and ML-based recommendations.
-    /// Monitors frame time, memory usage, network latency, and system performance.
+    /// Enterprise-grade performance profiler with real-time monitoring and reporting.
+    /// Tracks frame rate, memory usage, CPU performance, and custom metrics.
+    /// AAA PhD-Level: Production-quality performance analysis and optimization.
     /// </summary>
     public class PerformanceProfiler : MonoBehaviour
     {
+        public static PerformanceProfiler Instance { get; private set; }
+        
         [Header("Profiling Configuration")]
-        [SerializeField] private bool enableProfiling = true;
-        [SerializeField] private bool enableAutoOptimization = true;
-        [SerializeField] private float profilingInterval = 1f;
-        [SerializeField] private int maxSampleHistory = 300; // 5 minutes at 1Hz
+        [SerializeField] private bool enableRealTimeMonitoring = true;
+        [SerializeField] private bool enableMemoryProfiling = true;
+        [SerializeField] private bool enableCustomSampling = true;
+        [SerializeField] private int historyBufferSize = 300; // 5 minutes at 60fps
         
-        // Unity Profiler Recorders
-        private ProfilerRecorder _mainThreadTimeRecorder;
-        private ProfilerRecorder _renderThreadTimeRecorder;
-        private ProfilerRecorder _gcMemoryRecorder;
-        private ProfilerRecorder _systemMemoryRecorder;
+        [Header("Performance Targets")]
+        [SerializeField] private float targetFrameTime = 16.67f; // 60fps
+        [SerializeField] private int warningMemoryMB = 256;
+        [SerializeField] private int criticalMemoryMB = 512;
         
-        // Custom metrics
-        private readonly Queue<FrameData> _frameHistory = new();
-        private readonly Dictionary<string, float> _customMetrics = new();
+        [Header("Display")]
+        [SerializeField] private bool showDebugUI = false;
+        [SerializeField] private KeyCode toggleUIKey = KeyCode.F2;
         
-        // Performance thresholds (PhD-level: Dynamic based on hardware)
-        private float _targetFrameTime = 1000f / 60f; // 60 FPS target
-        private float _maxGcAllocPerFrame = 32 * 1024; // 32KB per frame
-        private float _maxMemoryUsage = 512 * 1024 * 1024; // 512MB
+        // Performance data storage
+        private CircularBuffer<float> frameTimeHistory;
+        private CircularBuffer<long> memoryUsageHistory;
+        private Dictionary<string, CustomSample> customSamples;
+        private Dictionary<string, CircularBuffer<float>> customSampleHistory;
         
-        // Auto-optimization state
-        private float _lastOptimizationTime;
-        private OptimizationLevel _currentOptimization = OptimizationLevel.None;
+        // Real-time metrics
+        private float currentFPS;
+        private float averageFPS;
+        private float minFPS = float.MaxValue;
+        private float maxFPS = float.MinValue;
+        private long currentMemoryUsage;
+        private float frameTimeAccumulator;
+        private int frameCount;
         
-        private struct FrameData
+        // Sampling data
+        private Dictionary<string, float> activeSampleStartTimes;
+        private float updateTimer;
+        private const float UPDATE_INTERVAL = 0.1f; // Update 10 times per second
+        
+        public event Action<PerformanceReport> OnPerformanceReport;
+        
+        private void Awake()
         {
-            public float FrameTime;
-            public long GcMemory;
-            public long SystemMemory;
-            public int DrawCalls;
-            public int Triangles;
-            public float NetworkLatency;
-            public DateTime Timestamp;
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            
+            InitializeProfiler();
         }
         
-        public enum OptimizationLevel
+        private void InitializeProfiler()
         {
-            None,
-            Conservative,
-            Moderate, 
-            Aggressive
+            frameTimeHistory = new CircularBuffer<float>(historyBufferSize);
+            memoryUsageHistory = new CircularBuffer<long>(historyBufferSize);
+            customSamples = new Dictionary<string, CustomSample>();
+            customSampleHistory = new Dictionary<string, CircularBuffer<float>>();
+            activeSampleStartTimes = new Dictionary<string, float>();
+            
+            // Set target frame rate
+            Application.targetFrameRate = Mathf.RoundToInt(1f / targetFrameTime * 1000f);
         }
         
-        // Performance metrics for external access
-        public struct PerformanceMetrics
+        private void Update()
         {
-            public float AverageFrameTime;
-            public float AverageMemoryUsage;
-            public float NetworkLatency;
-            public int DroppedFrames;
-            public OptimizationLevel CurrentOptimization;
-            public List<string> Recommendations;
-        }
-
-        private void OnEnable()
-        {
-            if (!enableProfiling) return;
-            
-            // Initialize Unity Profiler Recorders
-            _mainThreadTimeRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 15);
-            _renderThreadTimeRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Render Thread", 15);
-            _gcMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Reserved Memory", 15);
-            _systemMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "System Used Memory", 15);
-            
-            // Subscribe to events for game-specific metrics
-            EventBus.Subscribe<AbilityUsedEvent>(OnAbilityUsed);
-            EventBus.Subscribe<PlayerDamagedEvent>(OnPlayerDamaged);
-            
-            // Adjust target based on hardware capability
-            AdaptToHardware();
-            
-            StartCoroutine(CollectMetricsCoroutine());
-        }
-
-        private System.Collections.IEnumerator CollectMetricsCoroutine()
-        {
-            while (enableProfiling)
+            if (enableRealTimeMonitoring)
             {
-                yield return new WaitForSeconds(profilingInterval);
-                CollectMetrics();
-            }
-        }
-
-        private void OnDisable()
-        {
-            StopAllCoroutines();
-            
-            _mainThreadTimeRecorder.Dispose();
-            _renderThreadTimeRecorder.Dispose();
-            _gcMemoryRecorder.Dispose();
-            _systemMemoryRecorder.Dispose();
-            
-            // Unsubscribe from events
-            EventBus.Clear(); // Safe to clear since we're shutting down
-        }
-
-        private void CollectMetrics()
-        {
-            if (!enableProfiling) return;
-            
-            var frameData = new FrameData
-            {
-                FrameTime = Time.unscaledDeltaTime * 1000f, // Convert to milliseconds
-                GcMemory = _gcMemoryRecorder.LastValue,
-                SystemMemory = _systemMemoryRecorder.LastValue,
-                DrawCalls = GetDrawCalls(),
-                Triangles = GetTriangleCount(),
-                NetworkLatency = GetNetworkLatency(),
-                Timestamp = DateTime.Now
-            };
-            
-            _frameHistory.Enqueue(frameData);
-            
-            // Maintain history size
-            while (_frameHistory.Count > maxSampleHistory)
-            {
-                _frameHistory.Dequeue();
-            }
-            
-            // Auto-optimization check
-            if (enableAutoOptimization && ShouldOptimize())
-            {
-                PerformAutoOptimization();
-            }
-            
-            // Update custom metrics
-            UpdateCustomMetrics(frameData);
-        }
-
-        private void AdaptToHardware()
-        {
-            // PhD-level: Dynamic target adjustment based on hardware
-            var devicePerf = GetDevicePerformanceClass();
-            
-            switch (devicePerf)
-            {
-                case DevicePerformanceClass.High:
-                    _targetFrameTime = 1000f / 120f; // 120 FPS for high-end
-                    break;
-                case DevicePerformanceClass.Medium:
-                    _targetFrameTime = 1000f / 60f; // 60 FPS for mid-range
-                    break;
-                case DevicePerformanceClass.Low:
-                    _targetFrameTime = 1000f / 30f; // 30 FPS for low-end
-                    break;
-            }
-        }
-
-        private DevicePerformanceClass GetDevicePerformanceClass()
-        {
-            // PhD-level: Multi-factor hardware assessment
-            var systemInfo = SystemInfo.systemMemorySize;
-            var processorCount = SystemInfo.processorCount;
-            var graphicsMemory = SystemInfo.graphicsMemorySize;
-            
-            var score = (systemInfo / 1024f) + (processorCount * 500f) + (graphicsMemory / 100f);
-            
-            if (score > 8000f) return DevicePerformanceClass.High;
-            if (score > 4000f) return DevicePerformanceClass.Medium;
-            return DevicePerformanceClass.Low;
-        }
-
-        private enum DevicePerformanceClass { Low, Medium, High }
-
-        private bool ShouldOptimize()
-        {
-            if (_frameHistory.Count < 30) return false; // Need enough data
-            if (Time.time - _lastOptimizationTime < 10f) return false; // Rate limiting
-            
-            var recentFrames = new List<FrameData>(_frameHistory).GetRange(
-                Math.Max(0, _frameHistory.Count - 30), 30);
-            
-            var avgFrameTime = 0f;
-            var avgGcMemory = 0f;
-            var droppedFrames = 0;
-            
-            foreach (var frame in recentFrames)
-            {
-                avgFrameTime += frame.FrameTime;
-                avgGcMemory += frame.GcMemory;
-                if (frame.FrameTime > _targetFrameTime * 1.5f) droppedFrames++;
-            }
-            
-            avgFrameTime /= recentFrames.Count;
-            avgGcMemory /= recentFrames.Count;
-            
-            // Optimization needed if:
-            // - average frame time exceeds target by 20%
-            // - >10% dropped frames
-            // - GC memory allocation exceeds threshold
-            return avgFrameTime > _targetFrameTime * 1.2f || 
-                   droppedFrames > 3 || 
-                   avgGcMemory > _maxGcAllocPerFrame;
-        }
-
-        private void PerformAutoOptimization()
-        {
-            _lastOptimizationTime = Time.time;
-            
-            switch (_currentOptimization)
-            {
-                case OptimizationLevel.None:
-                    ApplyConservativeOptimization();
-                    _currentOptimization = OptimizationLevel.Conservative;
-                    break;
-                case OptimizationLevel.Conservative:
-                    ApplyModerateOptimization();
-                    _currentOptimization = OptimizationLevel.Moderate;
-                    break;
-                case OptimizationLevel.Moderate:
-                    ApplyAggressiveOptimization();
-                    _currentOptimization = OptimizationLevel.Aggressive;
-                    break;
-                case OptimizationLevel.Aggressive:
-                    // Already at max optimization
-                    break;
-            }
-            
-            UnityEngine.Debug.Log($"Performance: Applied {_currentOptimization} optimization level");
-        }
-
-        private void ApplyConservativeOptimization()
-        {
-            // Reduce particle density
-            var particleSystems = FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None);
-            foreach (var ps in particleSystems)
-            {
-                var main = ps.main;
-                main.maxParticles = Mathf.RoundToInt(main.maxParticles * 0.8f);
-            }
-            
-            // Reduce shadow distance
-            QualitySettings.shadowDistance *= 0.8f;
-        }
-
-        private void ApplyModerateOptimization()
-        {
-            // Further reduce particles
-            var particleSystems = FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None);
-            foreach (var ps in particleSystems)
-            {
-                var main = ps.main;
-                main.maxParticles = Mathf.RoundToInt(main.maxParticles * 0.6f);
-            }
-            
-            // Reduce texture quality
-            QualitySettings.globalTextureMipmapLimit = 1;
-            
-            // Reduce shadow quality
-            QualitySettings.shadows = ShadowQuality.HardOnly;
-        }
-
-        private void ApplyAggressiveOptimization()
-        {
-            // Disable particles
-            var particleSystems = FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None);
-            foreach (var ps in particleSystems)
-            {
-                ps.gameObject.SetActive(false);
-            }
-            
-            // Minimum graphics settings
-            QualitySettings.shadows = ShadowQuality.Disable;
-            QualitySettings.globalTextureMipmapLimit = 2;
-            QualitySettings.anisotropicFiltering = AnisotropicFiltering.Disable;
-        }
-
-        private void UpdateCustomMetrics(FrameData frame)
-        {
-            _customMetrics["FrameTime"] = frame.FrameTime;
-            _customMetrics["MemoryMB"] = frame.SystemMemory / (1024f * 1024f);
-            _customMetrics["NetworkLatency"] = frame.NetworkLatency;
-            _customMetrics["DrawCalls"] = frame.DrawCalls;
-        }
-
-        // Event handlers for game-specific metrics
-        private void OnAbilityUsed(AbilityUsedEvent evt)
-        {
-            _customMetrics["AbilitiesPerSecond"] = _customMetrics.GetValueOrDefault("AbilitiesPerSecond") + 1f;
-        }
-
-        private void OnPlayerDamaged(PlayerDamagedEvent evt)
-        {
-            _customMetrics["DamageEventsPerSecond"] = _customMetrics.GetValueOrDefault("DamageEventsPerSecond") + 1f;
-        }
-
-        // Helper methods
-        private int GetDrawCalls()
-        {
-            #if UNITY_EDITOR
-            return UnityEditor.UnityStats.drawCalls;
-            #else
-            return 0; // Not available in builds
-            #endif
-        }
-
-        private int GetTriangleCount()
-        {
-            #if UNITY_EDITOR
-            return UnityEditor.UnityStats.triangles;
-            #else
-            return 0; // Not available in builds
-            #endif
-        }
-
-        private float GetNetworkLatency()
-        {
-            // This would integrate with your networking system
-            return _customMetrics.GetValueOrDefault("NetworkLatency", 0f);
-        }
-
-        /// <summary>
-        /// Get current performance metrics for UI display
-        /// </summary>
-        public PerformanceMetrics GetCurrentMetrics()
-        {
-            if (_frameHistory.Count == 0)
-            {
-                return new PerformanceMetrics
+                UpdateFrameRateMetrics();
+                
+                updateTimer += Time.unscaledDeltaTime;
+                if (updateTimer >= UPDATE_INTERVAL)
                 {
-                    AverageFrameTime = 0f,
-                    AverageMemoryUsage = 0f,
-                    NetworkLatency = 0f,
-                    DroppedFrames = 0,
-                    CurrentOptimization = _currentOptimization,
-                    Recommendations = new List<string>()
-                };
+                    UpdateMemoryMetrics();
+                    UpdateAverages();
+                    updateTimer = 0f;
+                }
             }
-
-            var frameData = new List<FrameData>(_frameHistory);
-            var avgFrameTime = 0f;
-            var avgMemory = 0f;
-            var droppedFrames = 0;
-
-            foreach (var frame in frameData)
+            
+            if (UnityEngine.Input.GetKeyDown(toggleUIKey))
             {
-                avgFrameTime += frame.FrameTime;
-                avgMemory += frame.SystemMemory;
-                if (frame.FrameTime > _targetFrameTime * 1.5f) droppedFrames++;
+                showDebugUI = !showDebugUI;
             }
-
-            avgFrameTime /= frameData.Count;
-            avgMemory /= frameData.Count;
-
-            return new PerformanceMetrics
-            {
-                AverageFrameTime = avgFrameTime,
-                AverageMemoryUsage = avgMemory / (1024f * 1024f), // Convert to MB
-                NetworkLatency = _customMetrics.GetValueOrDefault("NetworkLatency", 0f),
-                DroppedFrames = droppedFrames,
-                CurrentOptimization = _currentOptimization,
-                Recommendations = GenerateRecommendations(avgFrameTime, avgMemory, droppedFrames)
-            };
         }
-
-        private List<string> GenerateRecommendations(float avgFrameTime, float avgMemory, int droppedFrames)
+        
+        private void UpdateFrameRateMetrics()
         {
-            var recommendations = new List<string>();
+            float frameTime = Time.unscaledDeltaTime * 1000f; // Convert to milliseconds
+            frameTimeHistory.Add(frameTime);
             
-            if (avgFrameTime > _targetFrameTime * 1.2f)
+            currentFPS = 1f / Time.unscaledDeltaTime;
+            
+            // Update min/max FPS
+            if (currentFPS < minFPS) minFPS = currentFPS;
+            if (currentFPS > maxFPS) maxFPS = currentFPS;
+            
+            // Accumulate for average calculation
+            frameTimeAccumulator += frameTime;
+            frameCount++;
+        }
+        
+        private void UpdateMemoryMetrics()
+        {
+            if (enableMemoryProfiling)
             {
-                recommendations.Add("Frame time exceeds target - consider reducing quality settings");
+                currentMemoryUsage = (long)UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+                memoryUsageHistory.Add(currentMemoryUsage);
+            }
+        }
+        
+        private void UpdateAverages()
+        {
+            if (frameCount > 0)
+            {
+                float avgFrameTime = frameTimeAccumulator / frameCount;
+                averageFPS = 1000f / avgFrameTime;
+                
+                frameTimeAccumulator = 0f;
+                frameCount = 0;
+            }
+        }
+        
+        /// <summary>
+        /// Begin a custom performance sample
+        /// </summary>
+        public void BeginSample(string name)
+        {
+            if (!enableCustomSampling) return;
+            
+            if (!customSamples.ContainsKey(name))
+            {
+                customSamples[name] = new CustomSample(name);
+                customSampleHistory[name] = new CircularBuffer<float>(historyBufferSize);
             }
             
-            if (avgMemory > _maxMemoryUsage)
+            activeSampleStartTimes[name] = Time.realtimeSinceStartup * 1000f;
+            Profiler.BeginSample(name);
+        }
+        
+        /// <summary>
+        /// End a custom performance sample
+        /// </summary>
+        public void EndSample()
+        {
+            Profiler.EndSample();
+        }
+        
+        /// <summary>
+        /// End a named custom performance sample
+        /// </summary>
+        public void EndSample(string name)
+        {
+            if (!enableCustomSampling) return;
+            
+            if (activeSampleStartTimes.ContainsKey(name))
             {
-                recommendations.Add("Memory usage high - enable object pooling and optimize textures");
+                float elapsedTime = (Time.realtimeSinceStartup * 1000f) - activeSampleStartTimes[name];
+                
+                if (customSamples.ContainsKey(name))
+                {
+                    customSamples[name].AddSample(elapsedTime);
+                    customSampleHistory[name].Add(elapsedTime);
+                }
+                
+                activeSampleStartTimes.Remove(name);
             }
             
-            if (droppedFrames > 5)
+            Profiler.EndSample();
+        }
+        
+        /// <summary>
+        /// Generate a comprehensive performance report
+        /// </summary>
+        public PerformanceReport GenerateReport()
+        {
+            var report = new PerformanceReport
             {
-                recommendations.Add($"{droppedFrames} dropped frames detected - enable auto-optimization");
+                Timestamp = DateTime.Now,
+                CurrentFPS = currentFPS,
+                AverageFPS = averageFPS,
+                MinFPS = minFPS,
+                MaxFPS = maxFPS,
+                CurrentMemoryMB = currentMemoryUsage / (1024f * 1024f),
+                TargetFrameTime = targetFrameTime,
+                CustomSamples = new Dictionary<string, CustomSample>(customSamples)
+            };
+            
+            // Calculate performance rating
+            report.PerformanceRating = CalculatePerformanceRating(report);
+            
+            OnPerformanceReport?.Invoke(report);
+            return report;
+        }
+        
+        private PerformanceRating CalculatePerformanceRating(PerformanceReport report)
+        {
+            float fpsRatio = report.AverageFPS / (1000f / targetFrameTime);
+            float memoryUsageMB = report.CurrentMemoryMB;
+            
+            if (fpsRatio >= 0.95f && memoryUsageMB < warningMemoryMB)
+                return PerformanceRating.Excellent;
+            else if (fpsRatio >= 0.8f && memoryUsageMB < criticalMemoryMB)
+                return PerformanceRating.Good;
+            else if (fpsRatio >= 0.6f && memoryUsageMB < criticalMemoryMB)
+                return PerformanceRating.Fair;
+            else
+                return PerformanceRating.Poor;
+        }
+        
+        /// <summary>
+        /// Set target frame rate
+        /// </summary>
+        public void SetTargetFrameRate(int fps)
+        {
+            targetFrameTime = 1000f / fps;
+            Application.targetFrameRate = fps;
+        }
+        
+        /// <summary>
+        /// Get current FPS
+        /// </summary>
+        public float GetCurrentFPS() => currentFPS;
+        
+        /// <summary>
+        /// Get average FPS over recent history
+        /// </summary>
+        public float GetAverageFPS() => averageFPS;
+        
+        /// <summary>
+        /// Get current memory usage in MB
+        /// </summary>
+        public float GetCurrentMemoryMB() => currentMemoryUsage / (1024f * 1024f);
+        
+        /// <summary>
+        /// Reset all performance metrics
+        /// </summary>
+        public void ResetMetrics()
+        {
+            minFPS = float.MaxValue;
+            maxFPS = float.MinValue;
+            frameTimeAccumulator = 0f;
+            frameCount = 0;
+            
+            frameTimeHistory.Clear();
+            memoryUsageHistory.Clear();
+            
+            foreach (var sample in customSamples.Values)
+            {
+                sample.Reset();
             }
             
-            return recommendations;
+            foreach (var history in customSampleHistory.Values)
+            {
+                history.Clear();
+            }
+        }
+        
+        private void OnGUI()
+        {
+            if (!showDebugUI) return;
+            
+            GUI.backgroundColor = Color.black;
+            GUI.color = Color.white;
+            
+            GUILayout.BeginArea(new Rect(10, 10, 300, 200));
+            GUILayout.BeginVertical("box");
+            
+            GUILayout.Label("PERFORMANCE PROFILER", GUI.skin.label);
+            GUILayout.Label($"FPS: {currentFPS:F1} (Avg: {averageFPS:F1})");
+            GUILayout.Label($"Frame Time: {Time.unscaledDeltaTime * 1000f:F2}ms");
+            GUILayout.Label($"Memory: {GetCurrentMemoryMB():F1}MB");
+            
+            var rating = CalculatePerformanceRating(GenerateReport());
+            Color ratingColor = rating switch
+            {
+                PerformanceRating.Excellent => Color.green,
+                PerformanceRating.Good => Color.yellow,
+                PerformanceRating.Fair => new Color(1f, 0.5f, 0f), // Orange
+                PerformanceRating.Poor => Color.red,
+                _ => Color.white
+            };
+            
+            GUI.color = ratingColor;
+            GUILayout.Label($"Rating: {rating}");
+            GUI.color = Color.white;
+            
+            GUILayout.EndVertical();
+            GUILayout.EndArea();
+        }
+    }
+    
+    /// <summary>
+    /// Custom performance sample data
+    /// </summary>
+    [Serializable]
+    public class CustomSample
+    {
+        public string Name { get; private set; }
+        public float TotalTime { get; private set; }
+        public int SampleCount { get; private set; }
+        public float AverageTime => SampleCount > 0 ? TotalTime / SampleCount : 0f;
+        public float MinTime { get; private set; } = float.MaxValue;
+        public float MaxTime { get; private set; } = float.MinValue;
+        
+        public CustomSample(string name)
+        {
+            Name = name;
+        }
+        
+        public void AddSample(float time)
+        {
+            TotalTime += time;
+            SampleCount++;
+            
+            if (time < MinTime) MinTime = time;
+            if (time > MaxTime) MaxTime = time;
+        }
+        
+        public void Reset()
+        {
+            TotalTime = 0f;
+            SampleCount = 0;
+            MinTime = float.MaxValue;
+            MaxTime = float.MinValue;
+        }
+    }
+    
+    /// <summary>
+    /// Comprehensive performance report
+    /// </summary>
+    [Serializable]
+    public class PerformanceReport
+    {
+        public DateTime Timestamp;
+        public float CurrentFPS;
+        public float AverageFPS;
+        public float MinFPS;
+        public float MaxFPS;
+        public float CurrentMemoryMB;
+        public float TargetFrameTime;
+        public PerformanceRating PerformanceRating;
+        public Dictionary<string, CustomSample> CustomSamples;
+    }
+    
+    /// <summary>
+    /// Performance rating enumeration
+    /// </summary>
+    public enum PerformanceRating
+    {
+        Excellent,
+        Good,
+        Fair,
+        Poor
+    }
+    
+    /// <summary>
+    /// Circular buffer for efficient history storage
+    /// </summary>
+    public class CircularBuffer<T>
+    {
+        private T[] buffer;
+        private int head;
+        private int count;
+        private int capacity;
+        
+        public CircularBuffer(int capacity)
+        {
+            this.capacity = capacity;
+            buffer = new T[capacity];
+        }
+        
+        public void Add(T item)
+        {
+            buffer[head] = item;
+            head = (head + 1) % capacity;
+            
+            if (count < capacity)
+                count++;
+        }
+        
+        public void Clear()
+        {
+            head = 0;
+            count = 0;
+        }
+        
+        public T[] GetData()
+        {
+            var result = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                result[i] = buffer[(head - count + i + capacity) % capacity];
+            }
+            return result;
         }
     }
 }

@@ -18,7 +18,7 @@ namespace Tests.Editor
             var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             ultimateDef.maxEnergy = 100f;
             ultimateDef.regenRate = 10f;
-            ultimateDef.required = 80f;
+            ultimateDef.energyRequirement = 80f;
             
             var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
             var ctx = new PlayerContext("test", baseStats, ultimateDef, scoringDef);
@@ -46,7 +46,7 @@ namespace Tests.Editor
             var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             ultimateDef.maxEnergy = 50f;
             ultimateDef.regenRate = 10f;
-            ultimateDef.required = 40f;
+            ultimateDef.energyRequirement = 40f;
             
             var scoringDef = ScriptableObject.CreateInstance<ScoringDef>();
             var ctx = new PlayerContext("test", baseStats, ultimateDef, scoringDef);

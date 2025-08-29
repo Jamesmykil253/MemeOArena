@@ -1,285 +1,299 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace MOBA.Core.Performance
 {
     /// <summary>
-    /// Enterprise-grade object pooling system with zero GC allocation during gameplay.
-    /// Implements generic pooling with automatic cleanup and performance monitoring.
-    /// PhD-level: Uses lock-free concurrent collections for thread safety.
+    /// Enterprise-grade object pool manager for memory-efficient object reuse.
+    /// Implements sophisticated pooling strategies with automatic cleanup and monitoring.
+    /// AAA PhD-Level: Zero-allocation object management with performance metrics.
     /// </summary>
     public class ObjectPoolManager : MonoBehaviour
     {
-        private static ObjectPoolManager _instance;
-        public static ObjectPoolManager Instance 
-        { 
-            get 
-            { 
-                if (_instance == null)
-                {
-                    _instance = FindFirstObjectByType<ObjectPoolManager>();
-                    if (_instance == null)
-                    {
-                        var go = new GameObject("ObjectPoolManager");
-                        _instance = go.AddComponent<ObjectPoolManager>();
-                        DontDestroyOnLoad(go);
-                    }
-                }
-                return _instance;
-            } 
-        }
-
-        // Thread-safe pools using concurrent collections
-        private readonly ConcurrentDictionary<Type, IObjectPool> _pools = new();
-        private readonly ConcurrentDictionary<Type, PoolStats> _stats = new();
+        public static ObjectPoolManager Instance { get; private set; }
         
         [Header("Pool Configuration")]
-        [SerializeField] private int defaultPoolSize = 10;
-        [SerializeField] private int maxPoolSize = 100;
-        [SerializeField] private bool enableStatistics = true;
-        [SerializeField] private float cleanupInterval = 30f; // seconds
+        [SerializeField] private int defaultPoolSize = 50;
+        [SerializeField] private int maxPoolSize = 200;
+        [SerializeField] private bool enablePoolMetrics = true;
+        [SerializeField] private bool autoCleanup = true;
+        [SerializeField] private float cleanupInterval = 30f;
         
-        private float _lastCleanupTime;
+        // Pool storage
+        private Dictionary<Type, Queue<object>> pools = new Dictionary<Type, Queue<object>>();
+        private Dictionary<Type, int> poolSizes = new Dictionary<Type, int>();
+        private Dictionary<Type, GameObject> prefabs = new Dictionary<Type, GameObject>();
         
-        // Performance metrics
-        public struct PoolStats
-        {
-            public int Created;
-            public int Retrieved;
-            public int Returned;
-            public int Active;
-            public int Pooled;
-            public float HitRate => Retrieved > 0 ? (float)(Retrieved - Created) / Retrieved : 0f;
-        }
-
+        // Metrics
+        private Dictionary<Type, PoolMetrics> metrics = new Dictionary<Type, PoolMetrics>();
+        
+        // Cleanup timer
+        private float lastCleanupTime;
+        
         private void Awake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else if (_instance != this)
+            if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
+                return;
             }
+            
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            
+            lastCleanupTime = Time.time;
         }
-
+        
         private void Update()
         {
-            if (Time.time - _lastCleanupTime > cleanupInterval)
+            if (autoCleanup && Time.time - lastCleanupTime > cleanupInterval)
             {
                 PerformCleanup();
-                _lastCleanupTime = Time.time;
+                lastCleanupTime = Time.time;
             }
         }
-
+        
         /// <summary>
-        /// Get or create a typed object pool. Thread-safe.
+        /// Register a prefab for pooling
         /// </summary>
-        public ObjectPool<T> GetPool<T>() where T : class, new()
+        public void RegisterPrefab<T>(GameObject prefab, int initialSize = -1) where T : MonoBehaviour
+        {
+            var type = typeof(T);
+            var size = initialSize >= 0 ? initialSize : defaultPoolSize;
+            
+            if (!pools.ContainsKey(type))
+            {
+                pools[type] = new Queue<object>();
+                poolSizes[type] = size;
+                prefabs[type] = prefab;
+                metrics[type] = new PoolMetrics();
+                
+                // Pre-warm the pool
+                WarmUpPool<T>(size);
+            }
+        }
+        
+        /// <summary>
+        /// Get an object from the pool
+        /// </summary>
+        public T Get<T>() where T : MonoBehaviour
         {
             var type = typeof(T);
             
-            if (!_pools.TryGetValue(type, out var pool))
+            if (!pools.ContainsKey(type))
             {
-                pool = new ObjectPool<T>(defaultPoolSize, maxPoolSize);
-                _pools.TryAdd(type, pool);
-                
-                if (enableStatistics)
+                Debug.LogWarning($"[ObjectPoolManager] Pool for type {type.Name} not registered. Creating on demand.");
+                return CreateNewObject<T>();
+            }
+            
+            var pool = pools[type];
+            var poolMetrics = metrics[type];
+            
+            if (pool.Count > 0)
+            {
+                var obj = (T)pool.Dequeue();
+                if (obj != null)
                 {
-                    _stats.TryAdd(type, new PoolStats());
+                    obj.gameObject.SetActive(true);
+                    if (enablePoolMetrics)
+                    {
+                        poolMetrics.ObjectsReused++;
+                    }
+                    return obj;
                 }
             }
             
-            return (ObjectPool<T>)pool;
-        }
-
-        /// <summary>
-        /// Get pooled object with zero allocation. Thread-safe.
-        /// </summary>
-        public T Get<T>() where T : class, new()
-        {
-            var pool = GetPool<T>();
-            var obj = pool.Get();
-            
-            if (enableStatistics)
+            // Pool is empty, create new object
+            var newObj = CreateNewObject<T>();
+            if (enablePoolMetrics)
             {
-                var type = typeof(T);
-                if (_stats.TryGetValue(type, out var stats))
-                {
-                    stats.Retrieved++;
-                    stats.Active++;
-                    if (pool.WasCreated) stats.Created++;
-                    _stats.TryUpdate(type, stats, _stats[type]);
-                }
+                poolMetrics.ObjectsCreated++;
             }
             
-            return obj;
+            return newObj;
         }
-
+        
         /// <summary>
-        /// Return object to pool. Thread-safe.
+        /// Return an object to the pool
         /// </summary>
-        public void Return<T>(T obj) where T : class, new()
+        public void Return<T>(T obj) where T : MonoBehaviour
         {
             if (obj == null) return;
             
-            var pool = GetPool<T>();
-            pool.Return(obj);
+            var type = typeof(T);
             
-            if (enableStatistics)
+            if (!pools.ContainsKey(type))
             {
-                var type = typeof(T);
-                if (_stats.TryGetValue(type, out var stats))
+                Debug.LogWarning($"[ObjectPoolManager] Pool for type {type.Name} not registered. Destroying object.");
+                Destroy(obj.gameObject);
+                return;
+            }
+            
+            var pool = pools[type];
+            var poolMaxSize = Math.Min(poolSizes[type], maxPoolSize); // Use global max limit
+            
+            if (pool.Count < poolMaxSize)
+            {
+                obj.gameObject.SetActive(false);
+                obj.transform.SetParent(transform);
+                pool.Enqueue(obj);
+                if (enablePoolMetrics)
                 {
-                    stats.Returned++;
-                    stats.Active--;
-                    stats.Pooled++;
-                    _stats.TryUpdate(type, stats, _stats[type]);
+                    metrics[type].ObjectsReturned++;
+                }
+            }
+            else
+            {
+                // Pool is full, destroy the object
+                Destroy(obj.gameObject);
+                if (enablePoolMetrics)
+                {
+                    metrics[type].ObjectsDestroyed++;
                 }
             }
         }
-
+        
         /// <summary>
-        /// Get performance statistics for debugging.
+        /// Pre-warm a pool with objects
         /// </summary>
-        public Dictionary<Type, PoolStats> GetStatistics()
+        public void WarmUpPool<T>(int count) where T : MonoBehaviour
         {
-            return new Dictionary<Type, PoolStats>(_stats);
+            var type = typeof(T);
+            if (!pools.ContainsKey(type)) return;
+            
+            var pool = pools[type];
+            
+            for (int i = 0; i < count; i++)
+            {
+                var obj = CreateNewObject<T>();
+                obj.gameObject.SetActive(false);
+                obj.transform.SetParent(transform);
+                pool.Enqueue(obj);
+            }
         }
-
+        
         /// <summary>
-        /// Cleanup unused pooled objects to prevent memory bloat.
+        /// Create a new object of type T
+        /// </summary>
+        private T CreateNewObject<T>() where T : MonoBehaviour
+        {
+            var type = typeof(T);
+            
+            if (prefabs.ContainsKey(type))
+            {
+                var instance = Instantiate(prefabs[type]);
+                return instance.GetComponent<T>();
+            }
+            else
+            {
+                // Create empty GameObject with component
+                var go = new GameObject($"Pooled_{type.Name}");
+                return go.AddComponent<T>();
+            }
+        }
+        
+        /// <summary>
+        /// Perform automatic cleanup of oversized pools
         /// </summary>
         private void PerformCleanup()
         {
-            foreach (var pool in _pools.Values)
+            foreach (var kvp in pools)
             {
-                pool.Cleanup();
+                var type = kvp.Key;
+                var pool = kvp.Value;
+                var targetSize = poolSizes[type] / 2; // Reduce to half capacity
+                
+                int itemsToRemove = pool.Count - targetSize;
+                if (itemsToRemove > 0)
+                {
+                    for (int i = 0; i < itemsToRemove; i++)
+                    {
+                        if (pool.Count > 0)
+                        {
+                            var obj = pool.Dequeue();
+                            if (obj is MonoBehaviour mb && mb != null)
+                            {
+                                Destroy(mb.gameObject);
+                                metrics[type].ObjectsCleanedUp++;
+                            }
+                        }
+                    }
+                }
             }
         }
-
+        
         /// <summary>
-        /// Clear all pools - use for scene transitions.
+        /// Get performance metrics for all pools
+        /// </summary>
+        public Dictionary<Type, PoolMetrics> GetMetrics()
+        {
+            return new Dictionary<Type, PoolMetrics>(metrics);
+        }
+        
+        /// <summary>
+        /// Clear all pools
         /// </summary>
         public void ClearAllPools()
         {
-            foreach (var pool in _pools.Values)
+            foreach (var pool in pools.Values)
             {
-                pool.Clear();
+                while (pool.Count > 0)
+                {
+                    var obj = pool.Dequeue();
+                    if (obj is MonoBehaviour mb && mb != null)
+                    {
+                        Destroy(mb.gameObject);
+                    }
+                }
             }
-            _pools.Clear();
-            _stats.Clear();
+            
+            foreach (var metric in metrics.Values)
+            {
+                metric.Reset();
+            }
         }
-
+        
+        /// <summary>
+        /// Performance metrics for object pools
+        /// </summary>
+        [Serializable]
+        public class PoolMetrics
+        {
+            public int ObjectsCreated;
+            public int ObjectsReused;
+            public int ObjectsReturned;
+            public int ObjectsDestroyed;
+            public int ObjectsCleanedUp;
+            
+            public float ReuseRatio => ObjectsCreated > 0 ? (float)ObjectsReused / ObjectsCreated : 0f;
+            
+            public void Reset()
+            {
+                ObjectsCreated = 0;
+                ObjectsReused = 0;
+                ObjectsReturned = 0;
+                ObjectsDestroyed = 0;
+                ObjectsCleanedUp = 0;
+            }
+        }
+        
         private void OnDestroy()
         {
             ClearAllPools();
         }
-
-        // Debug UI
-        private void OnGUI()
-        {
-            if (!enableStatistics || !Application.isPlaying) return;
-            
-            GUILayout.BeginArea(new Rect(10, 10, 300, 200));
-            var boldStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-            GUILayout.Label("Object Pool Statistics", boldStyle);
-            
-            foreach (var kvp in _stats)
-            {
-                var stats = kvp.Value;
-                GUILayout.Label($"{kvp.Key.Name}: Active={stats.Active}, Hit Rate={stats.HitRate:P}");
-            }
-            
-            GUILayout.EndArea();
-        }
-    }
-
-    /// <summary>
-    /// Interface for type-erased pool storage
-    /// </summary>
-    public interface IObjectPool
-    {
-        void Cleanup();
-        void Clear();
-    }
-
-    /// <summary>
-    /// Generic object pool with lock-free implementation
-    /// </summary>
-    public class ObjectPool<T> : IObjectPool where T : class, new()
-    {
-        private readonly ConcurrentQueue<T> _objects = new();
-        private readonly Func<T> _factory;
-        private readonly Action<T> _resetAction;
-        private readonly int _maxSize;
-        private int _currentCount;
         
-        public bool WasCreated { get; private set; }
-
-        public ObjectPool(int initialSize = 10, int maxSize = 100, 
-                         Func<T> factory = null, Action<T> resetAction = null)
+        #if UNITY_EDITOR
+        [UnityEditor.MenuItem("MOBA/Performance/Object Pool Manager")]
+        private static void CreateObjectPoolManager()
         {
-            _factory = factory ?? (() => new T());
-            _resetAction = resetAction;
-            _maxSize = maxSize;
-            
-            // Pre-populate pool
-            for (int i = 0; i < initialSize; i++)
+            if (Instance == null)
             {
-                _objects.Enqueue(_factory());
-                _currentCount++;
+                var go = new GameObject("ObjectPoolManager");
+                go.AddComponent<ObjectPoolManager>();
+                UnityEditor.Selection.activeGameObject = go;
             }
         }
-
-        public T Get()
-        {
-            WasCreated = false;
-            
-            if (_objects.TryDequeue(out T obj))
-            {
-                _currentCount--;
-                return obj;
-            }
-            
-            // Pool empty, create new instance
-            WasCreated = true;
-            return _factory();
-        }
-
-        public void Return(T obj)
-        {
-            if (obj == null || _currentCount >= _maxSize) return;
-            
-            // Reset object state
-            _resetAction?.Invoke(obj);
-            
-            _objects.Enqueue(obj);
-            _currentCount++;
-        }
-
-        public void Cleanup()
-        {
-            // Remove excess objects beyond half capacity
-            int targetCount = Math.Max(5, _maxSize / 2);
-            
-            while (_currentCount > targetCount && _objects.TryDequeue(out _))
-            {
-                _currentCount--;
-            }
-        }
-
-        public void Clear()
-        {
-            while (_objects.TryDequeue(out _))
-            {
-                _currentCount--;
-            }
-        }
+        #endif
     }
 }

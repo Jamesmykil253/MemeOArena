@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using MOBA.Controllers;
 
 namespace MOBA.Demo
 {
@@ -161,7 +162,7 @@ namespace MOBA.Demo
                 DestroyImmediate(visual.GetComponent<CapsuleCollider>());
                 
                 // Add controller
-                playerObj.AddComponent<DemoPlayerController>();
+                playerObj.AddComponent<UnifiedLocomotionController>();
                 
                 Debug.Log("✓ Created player from components with material");
             }
@@ -266,7 +267,7 @@ namespace MOBA.Demo
             Debug.Log("🔧 Fixing missing materials...");
             
             // Fix players
-            DemoPlayerController[] players = FindObjectsByType<DemoPlayerController>(FindObjectsSortMode.None);
+            UnifiedLocomotionController[] players = FindObjectsByType<UnifiedLocomotionController>(FindObjectsSortMode.None);
             foreach (var player in players)
             {
                 FixPlayerMaterial(player.gameObject);

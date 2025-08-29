@@ -10,7 +10,7 @@ namespace MOBA.Controllers
     {
         private readonly PlayerContext context;
         public AbilityController(PlayerContext ctx) { context = ctx; }
-        public bool IsUltimateReady => context.ultimateEnergy >= context.ultimateDef.required;
+        public bool IsUltimateReady => context.ultimateEnergy >= context.ultimateDef.energyRequirement;
 
         /// <summary>
         /// Update ultimate energy by regenRate * dt, capped at maxEnergy.

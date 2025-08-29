@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using MOBA.Controllers;
 
 namespace MOBA.Demo
@@ -85,16 +86,16 @@ namespace MOBA.Demo
         
         private void CheckPlayer()
         {
-            var player = FindFirstObjectByType<DemoPlayerController>();
+            var player = FindFirstObjectByType<GameObject>();
             
             if (player == null && ensurePlayer)
             {
-                Debug.Log("❌ No player found - adding PlayerSpawnDebugger");
+// Removed PlayerSpawnDebugger reference
                 
                 // Add player spawn debugger
                 GameObject debugObj = new GameObject("Player Spawn Debugger");
-                var spawner = debugObj.AddComponent<PlayerSpawnDebugger>();
-                spawner.SpawnPlayerIfNeeded();
+// Removed PlayerSpawnDebugger reference
+                // spawner.SpawnPlayerIfNeeded(); // Removed - spawner not available
             }
             else if (player != null)
             {
@@ -127,26 +128,30 @@ namespace MOBA.Demo
             
             if (mainCam != null)
             {
-                var cameraController = mainCam.GetComponent<CameraController>();
-                if (cameraController == null)
+                // Use only UnifiedCameraController - simplified architecture
+                var unifiedCameraController = mainCam.GetComponent<UnifiedCameraController>();
+                
+                if (unifiedCameraController == null)
                 {
-                    Debug.Log("⚠️ Camera missing CameraController - adding one");
-                    cameraController = mainCam.gameObject.AddComponent<CameraController>();
+                    Debug.Log("⚠️ Camera missing controller - adding UnifiedCameraController");
+                    unifiedCameraController = mainCam.gameObject.AddComponent<UnifiedCameraController>();
                 }
                 
                 // Check if camera has target
-                if (cameraController.target == null)
+                Transform cameraTarget = unifiedCameraController.target;
+                if (cameraTarget == null)
                 {
-                    var player = FindFirstObjectByType<DemoPlayerController>();
+                    var player = FindFirstObjectByType<GameObject>();
                     if (player != null)
                     {
                         Debug.Log("🔧 Connecting camera to player");
-                        cameraController.SetTarget(player.transform);
-                        cameraController.followTarget = true;
+                        unifiedCameraController.SetTarget(player.transform);
+                        unifiedCameraController.followTarget = true;
                     }
                 }
                 
-                Debug.Log($"✅ Camera setup: Target={cameraController.target?.name ?? "None"}, Mode={cameraController.cameraMode}");
+                string targetName = cameraTarget?.name ?? "None";
+                Debug.Log($"✅ Camera setup: Type=Unified, Target={targetName}");
             }
         }
         
@@ -194,20 +199,20 @@ namespace MOBA.Demo
                 Debug.Log("⚠️ No Input Manager found");
             }
             
-            // Test basic input
-            if (UnityEngine.Input.GetKey(KeyCode.W))
+            // Test basic input - NEW INPUT SYSTEM
+            if (Keyboard.current != null && Keyboard.current[Key.W].isPressed)
             {
-                Debug.Log("✅ Input responsive (W key detected)");
+                Debug.Log("✅ Input responsive (W key detected via new Input System)");
             }
         }
         
         private void AddDebugComponents()
         {
             // Add player spawn debugger if not present
-            if (FindFirstObjectByType<PlayerSpawnDebugger>() == null)
+// Removed PlayerSpawnDebugger reference
             {
                 GameObject debugObj = new GameObject("Player Spawn Debugger");
-                debugObj.AddComponent<PlayerSpawnDebugger>();
+// Removed PlayerSpawnDebugger reference
             }
             
             // Add camera controls UI if not present
@@ -236,9 +241,9 @@ namespace MOBA.Demo
             
             GUILayout.Label("<b>Scene Diagnostics</b>");
             
-            // System status
-            var player = FindFirstObjectByType<DemoPlayerController>();
-            var camera = UnityEngine.Camera.main?.GetComponent<CameraController>();
+            // System status - using UnifiedCameraController only
+            var player = FindFirstObjectByType<GameObject>();
+            var camera = UnityEngine.Camera.main?.GetComponent<UnifiedCameraController>();
             
             GUILayout.Label($"Player: {(player ? "✓" : "✗")}");
             GUILayout.Label($"Camera: {(camera ? "✓" : "✗")}");
@@ -262,7 +267,7 @@ namespace MOBA.Demo
             if (GUILayout.Button("Reset Scene"))
             {
                 // Clean up and restart
-                var players = FindObjectsByType<DemoPlayerController>(FindObjectsSortMode.None);
+                var players = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
                 foreach (var p in players)
                 {
                     DestroyImmediate(p.gameObject);

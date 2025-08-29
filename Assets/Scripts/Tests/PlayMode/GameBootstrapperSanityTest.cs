@@ -40,7 +40,7 @@ namespace Tests.PlayMode
 
             // Use reflection to assert private fields are set
             var locomotionField = typeof(GameBootstrapper).GetField("locomotion", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var locomotion = (LocomotionController)locomotionField.GetValue(bootstrap);
+            var locomotion = (ILocomotionController)locomotionField.GetValue(bootstrap);
             Assert.NotNull(locomotion);
         }
     }

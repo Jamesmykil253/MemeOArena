@@ -95,9 +95,8 @@ namespace MOBA.Bootstrap
             var energyDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             energyDef.maxEnergy = 100f;
             energyDef.regenRate = 1.5f; // Slow passive regen
-            energyDef.required = 100f; // Need full energy for ultimate
             energyDef.scoreDepositEnergy = 30f; // Good energy from scoring
-            energyDef.energyRequirement = 100f; // Same as required
+            energyDef.energyRequirement = 100f; // Energy needed for ultimate
             energyDef.cooldownConstant = 2f; // 50 second cooldown (100/2)
             return energyDef;
         }

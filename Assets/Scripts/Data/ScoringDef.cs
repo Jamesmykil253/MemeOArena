@@ -30,6 +30,21 @@ namespace MOBA.Data
             var thresholdsToUse = thresholds ?? this.thresholds;
             if (thresholdsToUse == null || baseTimes == null) return 0f;
             
+            // VALIDATION: Check array length mismatch
+            if (thresholdsToUse.Length != baseTimes.Length)
+            {
+                throw new System.InvalidOperationException($"Threshold array length ({thresholdsToUse.Length}) does not match baseTime array length ({baseTimes.Length})");
+            }
+            
+            // VALIDATION: Check if thresholds are sorted
+            for (int i = 1; i < thresholdsToUse.Length; i++)
+            {
+                if (thresholdsToUse[i] < thresholdsToUse[i - 1])
+                {
+                    throw new System.InvalidOperationException($"Thresholds must be sorted in ascending order. Found {thresholdsToUse[i - 1]} > {thresholdsToUse[i]} at index {i}");
+                }
+            }
+            
             int tier = 0;
             for (int i = 0; i < thresholdsToUse.Length; i++)
             {

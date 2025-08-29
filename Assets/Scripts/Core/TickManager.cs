@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using MOBA.Telemetry;
 using MOBA.Networking;
 
 namespace MOBA.Core
@@ -21,7 +20,7 @@ namespace MOBA.Core
         private uint currentTick;
         private bool isRunning;
         
-        // Input handling
+        // Simplified input handling - removed networking dependencies
         private readonly Queue<InputCmd> inputQueue = new Queue<InputCmd>();
         private readonly Dictionary<string, InputCmd> lastInputs = new Dictionary<string, InputCmd>();
         
@@ -41,7 +40,7 @@ namespace MOBA.Core
             // Set Unity's fixed timestep to match our tick rate
             Time.fixedDeltaTime = tickInterval;
             
-            GameLogger.LogGameplayEvent(0, "SYSTEM", "TICK_MANAGER", $"Initialized with {tickRate}Hz tick rate");
+            Debug.Log($"[TICK_MANAGER] Initialized with {tickRate}Hz tick rate");
         }
 
         private void Start()
@@ -56,7 +55,7 @@ namespace MOBA.Core
         {
             isRunning = true;
             accumulator = 0f;
-            GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "SIMULATION", "Started");
+            Debug.Log($"[TICK_MANAGER] Simulation started at tick {currentTick}");
         }
 
         /// <summary>
@@ -65,7 +64,7 @@ namespace MOBA.Core
         public void StopSimulation()
         {
             isRunning = false;
-            GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "SIMULATION", "Stopped");
+            Debug.Log($"[TICK_MANAGER] Simulation stopped at tick {currentTick}");
         }
 
         /// <summary>
@@ -106,11 +105,10 @@ namespace MOBA.Core
             // Track performance metrics
             if (ticksThisFrame > 1)
             {
-                GameMetrics.Instance.RecordMetric("ticks_per_frame", ticksThisFrame);
+                // Removed telemetry - was: 
                 if (ticksThisFrame >= maxTicksPerFrame)
                 {
-                    GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "PERFORMANCE", 
-                        $"Hit max ticks per frame: {maxTicksPerFrame}", GameLogger.LogLevel.Warning);
+                    Debug.LogWarning($"[TICK_MANAGER] Hit max ticks per frame: {maxTicksPerFrame}");
                 }
             }
         }
@@ -129,8 +127,8 @@ namespace MOBA.Core
             OnFixedUpdate?.Invoke(tickInterval);
             
             // Record tick timing for metrics
-            GameMetrics.Instance.RecordMetric("current_tick", currentTick);
-            GameMetrics.Instance.RecordMetric("tick_interval", tickInterval);
+            
+            
         }
 
         private void ProcessInputs()
@@ -142,8 +140,7 @@ namespace MOBA.Core
                 // Log input for debugging
                 if (input.moveInput != Vector2.zero || input.jumpPressed)
                 {
-                    GameLogger.LogGameplayEvent(currentTick, input.sequenceNumber.ToString(), 
-                        "INPUT", $"Move:{input.moveInput} Jump:{input.jumpPressed}");
+                    Debug.Log($"[TICK_MANAGER] Tick {currentTick} Input - Move:{input.moveInput} Jump:{input.jumpPressed}");
                 }
                 
                 // Input will be consumed by controllers that subscribe to the tick event
@@ -164,9 +161,7 @@ namespace MOBA.Core
                                            locState, abState, scoreState);
             
             OnSnapshot?.Invoke(snapshot);
-            
-            GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "SNAPSHOT", 
-                $"Broadcast: Pos={position:F2} Energy={ultimateEnergy:F1}");
+            Debug.Log($"[TICK_MANAGER] Snapshot broadcast - Pos={position:F2} Energy={ultimateEnergy:F1}");
         }
 
         /// <summary>
@@ -176,15 +171,13 @@ namespace MOBA.Core
         {
             if (tick > currentTick)
             {
-                GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "ROLLBACK", 
-                    $"Cannot rollback to future tick {tick}", GameLogger.LogLevel.Error);
                 return;
             }
             
             currentTick = tick;
             accumulator = 0f;
             
-            GameLogger.LogGameplayEvent(currentTick, "SYSTEM", "ROLLBACK", $"Reset to tick {tick}");
+            
         }
 
         private void OnDestroy()

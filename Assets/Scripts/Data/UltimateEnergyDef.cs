@@ -10,9 +10,8 @@ namespace MOBA.Data
     {
         public float maxEnergy;
         public float regenRate;
-        public float required;
         public float scoreDepositEnergy;
-        public float energyRequirement;
+        public float energyRequirement; // Primary property name
         public float cooldownConstant = 50f; // Default cooldown constant
     }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace MOBA.Demo
 {
@@ -16,7 +17,8 @@ namespace MOBA.Demo
         
         void Update()
         {
-            if (UnityEngine.Input.GetKeyDown(toggleKey))
+            // Toggle UI display - NEW INPUT SYSTEM
+            if (Keyboard.current != null && Keyboard.current[Key.F1].wasPressedThisFrame)
             {
                 showUI = !showUI;
             }

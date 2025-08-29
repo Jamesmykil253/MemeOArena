@@ -1,10 +1,8 @@
 using UnityEngine;
 using MOBA.Core;
 using MOBA.Data;
+using static MOBA.Data.JumpPhysicsDef;
 using MOBA.Input;
-using MOBA.Physics;
-using MOBA.Core.Events;
-using MOBA.Core.Logging;
 
 namespace MOBA.Controllers
 {
@@ -20,7 +18,7 @@ namespace MOBA.Controllers
         [SerializeField] private bool enableDebugVisuals = false;
         
         [Header("References")]
-        [SerializeField] private PhysicsLocomotionController locomotionController;
+        [SerializeField] private UnifiedLocomotionController locomotionController;
         
         // Jump state tracking
         private JumpState currentJumpState = JumpState.Grounded;
@@ -40,7 +38,6 @@ namespace MOBA.Controllers
         // Performance metrics
         private int totalJumps;
         private int apexBoosts;
-        private float averageJumpHeight;
         
         public enum JumpState
         {
@@ -77,13 +74,13 @@ namespace MOBA.Controllers
         private void Awake()
         {
             if (locomotionController == null)
-                locomotionController = GetComponent<PhysicsLocomotionController>();
+                locomotionController = GetComponent<UnifiedLocomotionController>();
                 
             if (jumpDef == null)
             {
                 // Create default jump definition
                 jumpDef = ScriptableObject.CreateInstance<JumpPhysicsDef>();
-                EnterpriseLogger.LogWarning("JUMP", gameObject.name, "No JumpPhysicsDef assigned, using defaults");
+                Debug.LogWarning($"No JumpPhysicsDef assigned to {gameObject.name}, using defaults");
             }
         }
         
@@ -138,11 +135,11 @@ namespace MOBA.Controllers
         {
             if (locomotionController == null) return;
             
-            var body = GetPhysicsBody();
+            var body = GetRigidbody();
             if (body == null) return;
             
-            var velocity = body.velocity;
-            var isGrounded = body.isGrounded;
+            var velocity = body.linearVelocity;
+            var isGrounded = locomotionController != null ? locomotionController.IsGrounded : CheckGroundedSimple();
             
             switch (currentJumpState)
             {
@@ -206,11 +203,11 @@ namespace MOBA.Controllers
         
         private void UpdateApexDetection()
         {
-            var body = GetPhysicsBody();
+            var body = GetRigidbody();
             if (body == null) return;
             
             // Advanced apex detection using velocity analysis
-            var velocity = body.velocity;
+            var velocity = body.linearVelocity;
             var velocityChange = velocity - lastVelocity;
             
             // Detect apex more precisely
@@ -244,35 +241,41 @@ namespace MOBA.Controllers
                 if (jumpHoldDuration >= jumpDef.MinHoldTime)
                 {
                     // This was a high jump, no additional action needed
-                    EnterpriseLogger.LogDebug("JUMP", gameObject.name, 
-                        $"High jump completed with hold time: {jumpHoldDuration:F3}s");
+                    Debug.Log($"High jump completed with hold time: {jumpHoldDuration:F3}s");
                 }
             }
         }
         
         private void PerformJump(JumpType jumpType)
         {
-            var body = GetPhysicsBody();
+            var body = GetRigidbody();
             if (body == null || locomotionController == null) return;
             
             float jumpVelocity;
             bool isDoubleJump = jumpType == JumpType.Double || jumpType == JumpType.ApexBoosted;
             bool isApexBoost = jumpType == JumpType.ApexBoosted;
             
-            // Calculate jump velocity based on type and hold time
+            // Determine apex jump type for enhanced formula
+            ApexJumpType apexType = ApexJumpType.None;
+            if (isDoubleJump && isAtApex)
+            {
+                apexType = jumpDef.GetApexJumpType(body.linearVelocity.y, apexDetectionTimer);
+            }
+            
+            // Calculate jump velocity using new formula
             switch (jumpType)
             {
                 case JumpType.Normal:
-                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f);
+                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f); // 1.0x - Quick press
                     break;
                 case JumpType.High:
-                    jumpVelocity = jumpDef.CalculateJumpVelocity(jumpHoldDuration);
+                    jumpVelocity = jumpDef.CalculateJumpVelocity(jumpHoldDuration); // 1.5x - Hold button
                     break;
                 case JumpType.Double:
-                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f, true, false);
+                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f, true, false, apexType); // 2.0x, 2.5x, or 2.8x based on apex timing
                     break;
                 case JumpType.ApexBoosted:
-                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f, true, true);
+                    jumpVelocity = jumpDef.CalculateJumpVelocity(0f, true, true, apexType); // Enhanced apex boost
                     apexBoosts++;
                     break;
                 default:
@@ -283,12 +286,20 @@ namespace MOBA.Controllers
             // Apply the jump through locomotion controller
             if (locomotionController != null)
             {
-                locomotionController.PerformEnhancedJump(jumpVelocity, isDoubleJump);
+                // Use the unified controller's jump method
+                locomotionController.TryJump();
+                
+                // Apply additional velocity for enhanced jump if needed
+                var rb = GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.linearVelocity = new Vector3(rb.linearVelocity.x, jumpVelocity, rb.linearVelocity.z);
+                }
             }
             else
             {
                 // Fallback: Apply jump impulse directly if no locomotion controller
-                var physicsBody = GetPhysicsBody();
+                var physicsBody = GetRigidbody();
                 if (physicsBody != null)
                 {
                     Vector3 jumpImpulse = Vector3.up * jumpVelocity;
@@ -308,13 +319,13 @@ namespace MOBA.Controllers
                     // Reset vertical velocity for double jumps
                     if (isDoubleJump)
                     {
-                        var currentVel = physicsBody.velocity;
-                        physicsBody.velocity = new Vector3(currentVel.x, 0f, currentVel.z);
+                        var currentVel = physicsBody.linearVelocity;
+                        physicsBody.linearVelocity = new Vector3(currentVel.x, 0f, currentVel.z);
                         hasDoubleJump = false;
                         TransitionToState(JumpState.DoubleJumping);
                     }
                     
-                    // Note: This is a fallback - proper physics integration would go through DeterministicPhysics
+                    // Note: This is a fallback - proper physics integration would go through /* DeterministicPhysics removed */
                     // physicsBody.AddForce(jumpImpulse, ForceMode.Impulse);
                 }
             }
@@ -324,15 +335,10 @@ namespace MOBA.Controllers
             totalJumps++;
             
             // Log jump event
-            EnterpriseLogger.LogInfo("JUMP", gameObject.name, 
-                $"Jump performed: {jumpType}, Velocity: {jumpVelocity:F2}, Hold: {jumpHoldDuration:F3}s");
+            Debug.Log($"Jump performed: {jumpType}, Velocity: {jumpVelocity:F2}, Hold: {jumpHoldDuration:F3}s");
             
             // Trigger event
             OnJumpPerformed?.Invoke(jumpType, jumpVelocity);
-            
-            // Publish to event bus
-            var jumpEvent = new JumpPerformedEvent(0, gameObject.name, jumpType, jumpVelocity, isApexBoost);
-            EventBus.PublishAsync(jumpEvent);
         }
         
         private bool CanPerformJump()
@@ -363,20 +369,26 @@ namespace MOBA.Controllers
                 apexDetectionTimer = 0f;
             }
             
-            EnterpriseLogger.LogTrace("JUMP", gameObject.name, 
-                $"Jump state: {oldState} -> {newState}");
+            Debug.Log($"Jump state: {oldState} -> {newState}");
         }
         
-        private PhysicsBody GetPhysicsBody()
+        private Rigidbody GetRigidbody()
         {
-            if (locomotionController == null) return null;
-            return locomotionController.PhysicsBody;
+            // Return the Rigidbody component instead of Rigidbody
+            return GetComponent<Rigidbody>();
+        }
+        
+        private bool CheckGroundedSimple()
+        {
+            // Simple ground check using raycast
+            return Physics.Raycast(transform.position, Vector3.down, 1.1f);
         }
         
         private IInputSource GetInputSource()
         {
-            if (locomotionController == null) return null;
-            return locomotionController.InputSource;
+            // UnifiedLocomotionController manages input internally
+            // Use Unity's input system directly for jump controller
+            return null;
         }
         
         // Event handlers
@@ -426,7 +438,7 @@ namespace MOBA.Controllers
             {
                 TotalJumps = totalJumps,
                 ApexBoosts = apexBoosts,
-                AverageJumpHeight = averageJumpHeight,
+                AverageJumpHeight = 0f, // Not implemented yet
                 ApexBoostRate = totalJumps > 0 ? (float)apexBoosts / totalJumps : 0f,
                 CurrentState = currentJumpState,
                 HasDoubleJump = hasDoubleJump,
@@ -455,9 +467,9 @@ namespace MOBA.Controllers
         }
     }
     
-    // Event for jump system
+    // Event for jump system - simplified without IGameEvent
     [System.Serializable]
-    public struct JumpPerformedEvent : IGameEvent
+    public struct JumpPerformedEvent
     {
         public uint Tick { get; }
         public string EventId { get; }

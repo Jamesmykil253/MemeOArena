@@ -14,10 +14,12 @@ namespace MOBA.Data
         public float Gravity = -20f;
         public float CoyoteTime = 0.1f; // time after leaving ground when jump is still allowed
         
-        [Header("Variable Jump Heights")]
-        public float NormalJumpMultiplier = 1.0f;     // Base jump
-        public float HighJumpMultiplier = 1.5f;       // Hold button for higher jump
-        public float DoubleJumpMultiplier = 2.0f;     // Double jump power
+        [Header("Variable Jump Heights - New Formula")]
+        public float NormalJumpMultiplier = 1.0f;     // Press jump button (space)
+        public float HighJumpMultiplier = 1.5f;       // Hold jump button  
+        public float DoubleJumpMultiplier = 2.0f;     // Double jump press button
+        public float ApexJumpMultiplier = 2.5f;       // Jump at max height (apex)
+        public float ApexWindowJumpMultiplier = 2.8f; // Jump within height apex window
         
         [Header("High Jump Hold Mechanics")]
         public float MinHoldTime = 0.1f;              // Minimum hold for high jump
@@ -31,12 +33,16 @@ namespace MOBA.Data
         public float DoubleJumpWindow = 0.5f;         // window after first jump where double jump is allowed
         public bool AllowDoubleJump = true;
         
-        [Header("Apex Boost System")]
+        [Header("Apex Boost System - Enhanced")]
         public bool EnableApexBoost = true;
         public float ApexDetectionThreshold = 0.5f;   // Velocity threshold to detect apex
-        public float ApexBoostMultiplier = 1.8f;      // Boost power when double jumping at apex
-        public float ApexWindow = 0.15f;              // Time window around apex for boost
+        public float ApexBoostMultiplier = 1.8f;      // Legacy: kept for compatibility
+        public float ApexWindow = 0.15f;              // Time window around apex for enhanced boost
         public Vector3 ApexBoostDirection = new Vector3(0f, 1f, 0f); // Boost direction
+        
+        [Header("Apex Timing Windows")]
+        public float MaxHeightWindow = 0.05f;         // Tight window for 2.5x jump (exact apex)
+        public float ApexRegionWindow = 0.25f;        // Wider window for 2.8x jump (apex region)
         
         [Header("Air Control")]
         public float AirControlMultiplier = 0.6f;     // Reduced movement control while airborne
@@ -48,29 +54,73 @@ namespace MOBA.Data
         public float LandingRecoveryTime = 0.05f;     // Brief period after landing before next jump
         
         /// <summary>
-        /// Calculate jump velocity based on hold time
+        /// Calculate jump velocity based on the new jump formula:
+        /// - Press jump (quick): 1.0x
+        /// - Hold jump: 1.5x  
+        /// - Double jump: 2.0x
+        /// - Jump at max height (tight apex): 2.5x
+        /// - Jump within apex region: 2.8x
         /// </summary>
-        public float CalculateJumpVelocity(float holdTime, bool isDoubleJump = false, bool isApexBoost = false)
+        public float CalculateJumpVelocity(float holdTime, bool isDoubleJump = false, bool isApexBoost = false, ApexJumpType apexType = ApexJumpType.None)
         {
             if (isDoubleJump)
             {
-                float multiplier = isApexBoost ? DoubleJumpMultiplier * ApexBoostMultiplier : DoubleJumpMultiplier;
-                return BaseJumpVelocity * multiplier;
+                // Determine apex boost type for double jumps
+                switch (apexType)
+                {
+                    case ApexJumpType.MaxHeight:
+                        return BaseJumpVelocity * ApexJumpMultiplier; // 2.5x - Jump at max height
+                    case ApexJumpType.ApexWindow:
+                        return BaseJumpVelocity * ApexWindowJumpMultiplier; // 2.8x - Jump within apex region
+                    default:
+                        return BaseJumpVelocity * DoubleJumpMultiplier; // 2.0x - Standard double jump
+                }
             }
             
             // Clamp hold time to valid range
             holdTime = Mathf.Clamp(holdTime, 0f, MaxHoldTime);
             
-            // Use normal jump for very short holds
+            // Use normal jump for quick press/release (under minimum hold time)
             if (holdTime < MinHoldTime)
             {
-                return BaseJumpVelocity * NormalJumpMultiplier;
+                return BaseJumpVelocity * NormalJumpMultiplier; // 1.0x - Press jump button
             }
             
-            // Calculate high jump based on hold curve
-            float normalizedHoldTime = holdTime / MaxHoldTime;
-            float curveValue = JumpHoldCurve.Evaluate(normalizedHoldTime);
-            return BaseJumpVelocity * curveValue;
+            // High jump for held button
+            return BaseJumpVelocity * HighJumpMultiplier; // 1.5x - Hold jump button
+        }
+        
+        /// <summary>
+        /// Apex jump types for the enhanced formula
+        /// </summary>
+        public enum ApexJumpType
+        {
+            None,       // Standard jump
+            MaxHeight,  // Jump at exact apex (tight window) - 2.5x
+            ApexWindow  // Jump within apex region (wider window) - 2.8x
+        }
+        
+        /// <summary>
+        /// Determine apex jump type based on timing and velocity
+        /// </summary>
+        public ApexJumpType GetApexJumpType(float verticalVelocity, float apexTime)
+        {
+            if (!IsAtApex(verticalVelocity))
+                return ApexJumpType.None;
+                
+            // Tight window for exact max height (2.5x)
+            if (apexTime <= MaxHeightWindow)
+            {
+                return ApexJumpType.MaxHeight;
+            }
+            
+            // Wider window for apex region (2.8x) 
+            if (apexTime <= ApexRegionWindow)
+            {
+                return ApexJumpType.ApexWindow;
+            }
+            
+            return ApexJumpType.None;
         }
         
         /// <summary>

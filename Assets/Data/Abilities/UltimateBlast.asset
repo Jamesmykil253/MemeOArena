@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfcef5a7c16904d2aa131880d78e5a54, type: 3}
+  m_Name: UltimateBlast
+  CastTime: 1.5
+  Cooldown: 45
+  energyCost: 85
+  Ratio: 2.5
+  Slider: 15
+  Base: 150
+  Knockback: 8
+  InputKey: 114
+  CritChance: 0
+  CritMultiplier: 2
+  DefensePenetration: 10
+  damageType: 1

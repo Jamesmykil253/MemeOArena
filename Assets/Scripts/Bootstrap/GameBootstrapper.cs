@@ -27,7 +27,7 @@ namespace MOBA.Bootstrap
         public bool enableEnhancedInput = true;
 
         private PlayerContext context;
-        private LocomotionController locomotion;
+        private ILocomotionController locomotion;
         private AbilityController abilityCtrl;
         private ScoringController scoringCtrl;
         private SpawnMachine spawnMachine;
@@ -46,7 +46,10 @@ namespace MOBA.Bootstrap
             inputSource = new UnityInputSource(inputActions);
             
             // Initialize controllers
-            locomotion = new LocomotionController(context, inputSource);
+            var locomotionGameObject = new GameObject("LocomotionController");
+            var unifiedLocomotion = locomotionGameObject.AddComponent<UnifiedLocomotionController>();
+            unifiedLocomotion.Initialize(context, inputSource);
+            locomotion = unifiedLocomotion;
             abilityCtrl = new AbilityController(context);
             scoringCtrl = new ScoringController(context);
             spawnMachine = new SpawnMachine(context);
@@ -65,7 +68,7 @@ namespace MOBA.Bootstrap
         private void FixedUpdate()
         {
             float dt = Time.fixedDeltaTime;
-            locomotion.Update(dt);
+            locomotion.Tick(dt);
             abilityCtrl.Update(dt);
             scoringCtrl.Update(dt);
             spawnMachine.Update(dt);
@@ -100,7 +103,7 @@ namespace MOBA.Bootstrap
         /// <summary>
         /// Access to locomotion controller (public for testing)
         /// </summary>
-        public LocomotionController GetLocomotionController()
+        public ILocomotionController GetLocomotionController()
         {
             return locomotion;
         }

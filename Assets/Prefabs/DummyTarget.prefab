@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 129279864755934643}
   m_Layer: 0
   m_Name: DummyTarget
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -47,6 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHP: 100
   currentHP: 0
+  defense: 0
 --- !u!1 &5981963472610131899
 GameObject:
   m_ObjectHideFlags: 0

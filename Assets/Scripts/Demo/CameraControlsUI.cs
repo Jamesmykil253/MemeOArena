@@ -6,6 +6,7 @@ namespace MOBA.Demo
     /// <summary>
     /// UI display for camera system controls and status.
     /// Shows current camera mode, panning state, and control instructions.
+    /// Supports UnifiedCameraController only.
     /// </summary>
     public class CameraControlsUI : MonoBehaviour
     {
@@ -15,20 +16,16 @@ namespace MOBA.Demo
         [SerializeField] private float uiWidth = 300f;
         [SerializeField] private float uiHeight = 200f;
         
-        private CameraController cameraController;
-        private DemoPlayerController playerController;
+        private UnifiedCameraController unifiedCameraController;
         
         void Start()
         {
-            // Find camera controller
-            cameraController = FindFirstObjectByType<CameraController>();
-            if (cameraController == null)
+            // Find unified camera controller only
+            unifiedCameraController = FindFirstObjectByType<UnifiedCameraController>();
+            if (unifiedCameraController == null)
             {
-                Debug.LogWarning("CameraControlsUI: No CameraController found in scene");
+                Debug.LogWarning("CameraControlsUI: No UnifiedCameraController found in scene");
             }
-            
-            // Find player controller for death state info
-            playerController = FindFirstObjectByType<DemoPlayerController>();
         }
         
         void OnGUI()
@@ -41,36 +38,33 @@ namespace MOBA.Demo
             
             // Camera status
             GUILayout.Label("<b>Camera Status:</b>");
-            if (cameraController != null)
+            if (unifiedCameraController != null)
             {
-                GUILayout.Label($"Mode: {cameraController.cameraMode}");
-                GUILayout.Label($"Following: {(cameraController.followTarget ? "Yes" : "No")}");
-                GUILayout.Label($"Target: {(cameraController.target ? cameraController.target.name : "None")}");
-                
-                // Check if we're in panning mode based on follow state
-                bool isPanning = !cameraController.followTarget;
-                GUILayout.Label($"Panning: {(isPanning ? "Active" : "Inactive")}");
+                GUILayout.Label($"System: Unified Camera");
+                GUILayout.Label($"Mode: {unifiedCameraController.CurrentPresetName}");
+                GUILayout.Label($"Following: {(unifiedCameraController.IsFollowing ? "Yes" : "No")}");
+                GUILayout.Label($"Target: {(unifiedCameraController.target ? unifiedCameraController.target.name : "None")}");
+                GUILayout.Label($"Panning: {(unifiedCameraController.IsPanning ? "Active" : "Inactive")}");
+            }
+            else
+            {
+                GUILayout.Label("No camera controller found");
             }
             
             // Player status
             GUILayout.Space(5);
             GUILayout.Label("<b>Player Status:</b>");
-            if (playerController != null)
-            {
-                GUILayout.Label($"Player State: {(playerController.IsDead ? "Dead" : "Alive")}");
-                GUILayout.Label($"Position: {playerController.transform.position:F1}");
-            }
+            GUILayout.Label("Player system simplified - no demo player controller");
             
             // Controls
             GUILayout.Space(5);
             GUILayout.Label("<b>Controls:</b>");
             GUILayout.Label("WASD - Move Player");
+            GUILayout.Label("SPACE - Jump (all multipliers)");
             GUILayout.Label("V (Hold) - Pan Camera");
             GUILayout.Label("Arrow Keys - Camera Pan");
             GUILayout.Label("Right Mouse - Camera Drag");
             GUILayout.Label("Scroll - Zoom Camera");
-            GUILayout.Label("C - Cycle Camera Modes");
-            GUILayout.Label("K - Simulate Death/Respawn");
             
             GUILayout.EndArea();
         }
@@ -94,17 +88,9 @@ namespace MOBA.Demo
         /// <summary>
         /// Update camera controller reference
         /// </summary>
-        public void SetCameraController(CameraController controller)
+        public void SetUnifiedCameraController(UnifiedCameraController controller)
         {
-            cameraController = controller;
-        }
-        
-        /// <summary>
-        /// Update player controller reference
-        /// </summary>
-        public void SetPlayerController(DemoPlayerController controller)
-        {
-            playerController = controller;
+            unifiedCameraController = controller;
         }
     }
 }

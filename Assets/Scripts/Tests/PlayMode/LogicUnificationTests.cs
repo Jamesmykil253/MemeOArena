@@ -3,7 +3,6 @@ using NUnit.Framework;
 using MOBA.Controllers;
 using MOBA.Core;
 using MOBA.Data;
-using MOBA.Physics;
 
 namespace Tests.PlayMode
 {
@@ -28,7 +27,7 @@ namespace Tests.PlayMode
             
             var ultimateDef = ScriptableObject.CreateInstance<UltimateEnergyDef>();
             ultimateDef.maxEnergy = 100f;
-            ultimateDef.required = 100f;
+            ultimateDef.energyRequirement = 100f;
             ultimateDef.regenRate = 2f;
             ultimateDef.cooldownConstant = 10f;
             
@@ -154,8 +153,8 @@ namespace Tests.PlayMode
             // Set test input
             testInput.SetMoveInput(new Vector2(1f, 0f));
             
-            // Update locomotion
-            locomotion.Update();
+            // Update locomotion using public Tick method
+            locomotion.Tick(Time.fixedDeltaTime);
             
             // Should have desired velocity
             Assert.Greater(locomotion.DesiredVelocity.magnitude, 0f);
@@ -179,17 +178,17 @@ namespace Tests.PlayMode
         }
         
         [Test]
-        public void PhysicsLocomotionController_HasFixedInitialization()
+        public void UnifiedLocomotionController_HasFixedInitialization()
         {
             var gameObj = new GameObject("TestPlayer");
-            var physics = gameObj.AddComponent<PhysicsLocomotionController>();
+            var locomotion = gameObj.AddComponent<UnifiedLocomotionController>();
             
             // Should not throw null reference exceptions during initialization
             Assert.DoesNotThrow(() => {
-                physics.Initialize(testContext, testInput);
+                locomotion.Initialize(testContext, testInput);
             });
             
-            Assert.IsNotNull(physics.FSM);
+            Assert.IsNotNull(locomotion);
             
             Object.DestroyImmediate(gameObj);
         }
@@ -207,7 +206,7 @@ namespace Tests.PlayMode
             
             // Test that they can all update without errors
             Assert.DoesNotThrow(() => {
-                locomotion.Update();
+                locomotion.Tick(0.1f);
                 abilityController.Update(0.1f);
                 scoring.Update(0.1f);
             });
