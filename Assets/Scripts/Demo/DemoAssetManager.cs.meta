@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: 66a883d18e6564e73831029150657e2b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - playerMaterial: {fileID: 2100000, guid: ddd0fd2446bc94491883313d0f714834, type: 2}
+  - groundMaterial: {fileID: 2100000, guid: 4421adc56e63f4334a7d065a5c900056, type: 2}
+  - enemyMaterial: {fileID: 2100000, guid: a0077e2727e85429bb8add02526c5021, type: 2}
+  - obstacleMaterial: {fileID: 2100000, guid: caf78033392864878a8323b7fcd13443, type: 2}
+  - pickupMaterial: {fileID: 2100000, guid: 2f1ad8d7523f249d1a36e97989e15c31, type: 2}
+  - playerPrefab: {fileID: 7195695835529973370, guid: 7add182a552d8499babf2e7be340d7b7, type: 3}
+  - groundPrefab: {fileID: 1346817119316124793, guid: 76eced0db77414d4c8c938350959b2ee, type: 3}
+  - obstaclePrefab: {fileID: 3849915326506779100, guid: b9e936b0fcec7459bac57c4a7f676ba5, type: 3}
+  - pickupPrefab: {fileID: 4523728268008031616, guid: b98e6c920f79540d1bc02b7d014b1037, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

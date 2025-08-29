@@ -8,5 +8,6 @@ namespace MOBA.Combat
     public interface IDamageable
     {
         void TakeDamage(int amount);
+        float GetDefense(); // For calculating damage reduction
     }
 }

@@ -22,6 +22,10 @@ namespace MOBA.Data
         public float magicDefense = 0f;
         public float ultimateCooldownRemaining = 0f;
         
+        // Combat stats (derived from base stats)
+        public int level = 1; // Default level
+        public float currentAttack => baseStats?.Attack ?? 0f;
+        
         // Scoring state
         public int currentScore = 0;
         public int carriedPoints = 0;

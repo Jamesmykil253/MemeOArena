@@ -94,10 +94,23 @@ namespace MOBA.Demo
                 visual.transform.localScale = visualScale;
                 visual.name = "Player Visual";
                 
-                // Apply color
-                Material playerMat = new Material(Shader.Find("Standard"));
-                playerMat.color = playerColor;
-                playerMat.SetFloat("_Metallic", 0.3f);
+                // Apply material using asset manager or create default
+                DemoAssetManager assetManager = FindFirstObjectByType<DemoAssetManager>();
+                Material playerMat;
+                
+                if (assetManager != null)
+                {
+                    playerMat = assetManager.GetMaterial("Player");
+                }
+                else
+                {
+                    // Fallback: create material manually
+                    playerMat = new Material(Shader.Find("Standard"));
+                    playerMat.color = playerColor;
+                    playerMat.SetFloat("_Metallic", 0.3f);
+                    playerMat.SetFloat("_Smoothness", 0.6f);
+                }
+                
                 visual.GetComponent<Renderer>().material = playerMat;
                 
                 // Remove collider from visual (parent will handle physics)

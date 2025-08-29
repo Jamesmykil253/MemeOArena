@@ -1,4 +1,5 @@
 using UnityEngine;
+using MOBA.Combat;
 
 namespace MOBA.Actors
 {
@@ -7,10 +8,11 @@ namespace MOBA.Actors
     /// reaches zero it logs a message and can be extended to trigger other
     /// events (e.g., respawn, scoring).
     /// </summary>
-    public class DummyTarget : MonoBehaviour
+    public class DummyTarget : MonoBehaviour, IDamageable
     {
         public float maxHP = 100f;
         public float currentHP;
+        public float defense = 0f; // Base defense value
 
         private void Awake()
         {
@@ -30,6 +32,14 @@ namespace MOBA.Actors
                 Debug.Log($"{name} has been defeated.");
                 // Extend here: award points, respawn, etc.
             }
+        }
+
+        /// <summary>
+        /// Get the defense value for damage reduction calculations.
+        /// </summary>
+        public float GetDefense()
+        {
+            return defense;
         }
 
         /// <summary>

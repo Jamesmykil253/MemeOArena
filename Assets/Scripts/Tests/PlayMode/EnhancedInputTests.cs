@@ -88,6 +88,22 @@ namespace Tests.PlayMode
             public bool IsMouseButtonUp(int button) => false;
             public bool HasInputThisFrame() => horizontal != 0f || vertical != 0f || jump;
             public float GetInputMagnitude() => new Vector2(horizontal, vertical).magnitude;
+            
+            // Extended input methods
+            public bool IsToggleChannelPressed() => false;
+            public bool IsSimulateDeathPressed() => false;
+            public bool IsHealPressed() => false;
+            public bool IsResetPressed() => false;
+            public bool IsArrowUpPressed() => false;
+            public bool IsArrowDownPressed() => false;
+            public bool IsArrowLeftPressed() => false;
+            public bool IsArrowRightPressed() => false;
+            public Vector2 GetArrowKeyVector() => Vector2.zero;
+            public bool IsRightMouseDragActive() => false;
+            public float GetScrollWheelDelta() => 0f;
+            public bool IsKeyPressed(UnityEngine.KeyCode key) => false;
+            public bool IsKeyHeld(UnityEngine.KeyCode key) => false;
+            public bool IsKeyReleased(UnityEngine.KeyCode key) => false;
         }
     }
 }

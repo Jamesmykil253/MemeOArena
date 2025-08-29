@@ -71,10 +71,19 @@ namespace MOBA.Bootstrap
         public static JumpPhysicsDef CreateDefaultJumpPhysics()
         {
             var jumpPhysics = ScriptableObject.CreateInstance<JumpPhysicsDef>();
-            jumpPhysics.InitialVelocity = 12f; // Strong initial jump
+            jumpPhysics.BaseJumpVelocity = 12f; // Strong initial jump
             jumpPhysics.Gravity = -25f; // Responsive gravity
             jumpPhysics.CoyoteTime = 0.15f; // Generous coyote time
             jumpPhysics.DoubleJumpWindow = 0.3f; // Reasonable double-jump window
+            jumpPhysics.NormalJumpMultiplier = 1.0f;
+            jumpPhysics.HighJumpMultiplier = 1.5f;
+            jumpPhysics.DoubleJumpMultiplier = 2.0f;
+            jumpPhysics.ApexBoostMultiplier = 1.8f;
+            jumpPhysics.AllowDoubleJump = true;
+            jumpPhysics.EnableApexBoost = true;
+            jumpPhysics.MinHoldTime = 0.2f;
+            jumpPhysics.MaxHoldTime = 1.0f;
+            jumpPhysics.ApexWindow = 0.3f;
             return jumpPhysics;
         }
 

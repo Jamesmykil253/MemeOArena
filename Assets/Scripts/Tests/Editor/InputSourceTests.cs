@@ -43,6 +43,22 @@ namespace Tests.Editor
             
             public bool HasInputThisFrame() => Horizontal != 0f || Vertical != 0f || JumpDown;
             public float GetInputMagnitude() => new UnityEngine.Vector2(Horizontal, Vertical).magnitude;
+            
+            // Extended input methods
+            public bool IsToggleChannelPressed() => false;
+            public bool IsSimulateDeathPressed() => false;
+            public bool IsHealPressed() => false;
+            public bool IsResetPressed() => false;
+            public bool IsArrowUpPressed() => false;
+            public bool IsArrowDownPressed() => false;
+            public bool IsArrowLeftPressed() => false;
+            public bool IsArrowRightPressed() => false;
+            public UnityEngine.Vector2 GetArrowKeyVector() => UnityEngine.Vector2.zero;
+            public bool IsRightMouseDragActive() => false;
+            public float GetScrollWheelDelta() => 0f;
+            public bool IsKeyPressed(UnityEngine.KeyCode key) => false;
+            public bool IsKeyHeld(UnityEngine.KeyCode key) => false;
+            public bool IsKeyReleased(UnityEngine.KeyCode key) => false;
         }
 
         [Test]

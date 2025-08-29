@@ -202,5 +202,127 @@ namespace MOBA.Input
         {
             return GetMoveVector().magnitude;
         }
+        
+        // Extended demo input methods (fixing mixed input inconsistencies)
+        public bool IsToggleChannelPressed()
+        {
+            return Keyboard.current?.eKey.wasPressedThisFrame ?? false;
+        }
+        
+        public bool IsSimulateDeathPressed()
+        {
+            return Keyboard.current?.kKey.wasPressedThisFrame ?? false;
+        }
+        
+        public bool IsHealPressed()
+        {
+            return Keyboard.current?.hKey.wasPressedThisFrame ?? false;
+        }
+        
+        public bool IsResetPressed()
+        {
+            return Keyboard.current?.rKey.wasPressedThisFrame ?? false;
+        }
+        
+        // Arrow key input for camera panning
+        public bool IsArrowUpPressed()
+        {
+            return Keyboard.current?.upArrowKey.isPressed ?? false;
+        }
+        
+        public bool IsArrowDownPressed()
+        {
+            return Keyboard.current?.downArrowKey.isPressed ?? false;
+        }
+        
+        public bool IsArrowLeftPressed()
+        {
+            return Keyboard.current?.leftArrowKey.isPressed ?? false;
+        }
+        
+        public bool IsArrowRightPressed()
+        {
+            return Keyboard.current?.rightArrowKey.isPressed ?? false;
+        }
+        
+        public Vector2 GetArrowKeyVector()
+        {
+            Vector2 arrowInput = Vector2.zero;
+            if (IsArrowUpPressed()) arrowInput.y += 1f;
+            if (IsArrowDownPressed()) arrowInput.y -= 1f;
+            if (IsArrowLeftPressed()) arrowInput.x -= 1f;
+            if (IsArrowRightPressed()) arrowInput.x += 1f;
+            return arrowInput;
+        }
+        
+        // Right mouse drag detection
+        public bool IsRightMouseDragActive()
+        {
+            return Mouse.current?.rightButton.isPressed ?? false;
+        }
+        
+        // Scroll wheel input
+        public float GetScrollWheelDelta()
+        {
+            return Mouse.current?.scroll.ReadValue().y ?? 0f;
+        }
+        
+        // General key state queries
+        public bool IsKeyPressed(KeyCode key)
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return false;
+            
+            var keyControl = GetKeyControlFromKeyCode(keyboard, key);
+            return keyControl?.wasPressedThisFrame ?? false;
+        }
+        
+        public bool IsKeyHeld(KeyCode key)
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return false;
+            
+            var keyControl = GetKeyControlFromKeyCode(keyboard, key);
+            return keyControl?.isPressed ?? false;
+        }
+        
+        public bool IsKeyReleased(KeyCode key)
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return false;
+            
+            var keyControl = GetKeyControlFromKeyCode(keyboard, key);
+            return keyControl?.wasReleasedThisFrame ?? false;
+        }
+        
+        private UnityEngine.InputSystem.Controls.KeyControl GetKeyControlFromKeyCode(Keyboard keyboard, KeyCode keyCode)
+        {
+            // Map common KeyCode values to Input System KeyControl
+            // This is a simplified mapping for demo purposes
+            return keyCode switch
+            {
+                KeyCode.Space => keyboard.spaceKey,
+                KeyCode.E => keyboard.eKey,
+                KeyCode.K => keyboard.kKey,
+                KeyCode.H => keyboard.hKey,
+                KeyCode.R => keyboard.rKey,
+                KeyCode.P => keyboard.pKey,
+                KeyCode.T => keyboard.tKey,
+                KeyCode.C => keyboard.cKey,
+                KeyCode.V => keyboard.vKey,
+                KeyCode.Q => keyboard.qKey,
+                KeyCode.W => keyboard.wKey,
+                KeyCode.A => keyboard.aKey,
+                KeyCode.S => keyboard.sKey,
+                KeyCode.D => keyboard.dKey,
+                KeyCode.F1 => keyboard.f1Key,
+                KeyCode.Escape => keyboard.escapeKey,
+                KeyCode.UpArrow => keyboard.upArrowKey,
+                KeyCode.DownArrow => keyboard.downArrowKey,
+                KeyCode.LeftArrow => keyboard.leftArrowKey,
+                KeyCode.RightArrow => keyboard.rightArrowKey,
+                _ => null
+            };
+        }
     }
 }

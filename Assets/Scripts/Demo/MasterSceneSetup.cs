@@ -18,6 +18,7 @@ namespace MOBA.Demo
         [SerializeField] private bool ensureCamera = true;
         [SerializeField] private bool ensureEnvironment = true;
         [SerializeField] private bool addDebugUI = true;
+        [SerializeField] private bool ensureAssetManager = true;
         
         void Start()
         {
@@ -40,6 +41,12 @@ namespace MOBA.Demo
         {
             Debug.Log("🔍 Running MemeOArena Setup Diagnostics...");
             
+            // Check asset manager first
+            if (ensureAssetManager)
+            {
+                CheckAssetManager();
+            }
+            
             // Check each system
             CheckPlayer();
             CheckCamera();
@@ -52,6 +59,28 @@ namespace MOBA.Demo
             }
             
             Debug.Log("✅ Setup diagnostics complete!");
+        }
+        
+        private void CheckAssetManager()
+        {
+            var assetManager = FindFirstObjectByType<DemoAssetManager>();
+            
+            if (assetManager == null)
+            {
+                Debug.Log("❌ No DemoAssetManager found - creating one");
+                
+                GameObject assetObj = new GameObject("Demo Asset Manager");
+                assetManager = assetObj.AddComponent<DemoAssetManager>();
+                
+                // Force create materials immediately
+                assetManager.CreateAllMaterials();
+            }
+            else
+            {
+                Debug.Log("✅ DemoAssetManager found");
+                // Ensure materials are created
+                assetManager.CreateAllMaterials();
+            }
         }
         
         private void CheckPlayer()

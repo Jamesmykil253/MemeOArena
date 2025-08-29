@@ -9,16 +9,21 @@ namespace MOBA.Controllers
     /// <summary>
     /// Enhanced locomotion controller with physics integration and FSM states.
     /// Handles grounded/airborne transitions, jumping, and knockback states.
+    /// Integrated with EnhancedJumpController for variable jump mechanics.
     /// </summary>
     public class PhysicsLocomotionController : MonoBehaviour
     {
         [Header("Movement Settings")]
         [SerializeField] private float moveSpeed = 5f;
-        [SerializeField] private float jumpForce = 10f;
         [SerializeField] private float acceleration = 20f;
         [SerializeField] private float deceleration = 15f;
         
-        [Header("Jump Settings")]
+        [Header("Jump Integration")]
+        [SerializeField] private JumpPhysicsDef jumpPhysicsDef;
+        [SerializeField] private Component enhancedJumpController; // Avoid type reference
+        
+        [Header("Legacy Jump Settings (Deprecated)")]
+        [SerializeField] private float jumpForce = 10f;
         [SerializeField] private float coyoteTime = 0.1f;
         [SerializeField] private float jumpBufferTime = 0.1f;
         [SerializeField] private bool allowDoubleJump = false;
@@ -48,6 +53,8 @@ namespace MOBA.Controllers
         public bool IsGrounded => physicsSystem.GetBody(physicsBodyId)?.isGrounded ?? false;
         public bool IsInKnockback => physicsSystem.GetBody(physicsBodyId)?.isInKnockback ?? false;
         public StateMachine FSM => fsm;
+        public IInputSource InputSource => inputSource; // Expose input source for jump controller
+        public PhysicsBody PhysicsBody => physicsSystem?.GetBody(physicsBodyId); // Expose physics body
         
         // Events
         public event Action OnJump;
@@ -62,12 +69,42 @@ namespace MOBA.Controllers
             {
                 Debug.LogError("PhysicsLocomotionController: TickManager not found in scene");
             }
+            
+            // Initialize physics system
+            physicsSystem = FindFirstObjectByType<DeterministicPhysics>();
+            if (physicsSystem == null)
+            {
+                Debug.LogError("PhysicsLocomotionController: DeterministicPhysics not found in scene");
+            }
+            
+            // Setup enhanced jump controller integration
+            if (enhancedJumpController == null)
+            {
+                enhancedJumpController = GetComponent<Component>();
+            }
+            
+            // Setup jump physics definition
+            if (jumpPhysicsDef == null && enhancedJumpController != null)
+            {
+                // Try to get it from the enhanced jump controller using reflection
+                var jumpDefField = enhancedJumpController.GetType().GetField("jumpDef", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                jumpPhysicsDef = jumpDefField?.GetValue(enhancedJumpController) as JumpPhysicsDef;
+            }
+            
+            // Setup state machine - CRITICAL FIX
+            SetupStateMachine();
         }
         
         private void Start()
         {
             RegisterPhysicsBody();
-            fsm.Change(groundedState);
+            
+            // Only change state if FSM is properly initialized
+            if (fsm != null && groundedState != null)
+            {
+                fsm.Change(groundedState, "Initial state");
+            }
         }
         
         /// <summary>
@@ -99,7 +136,11 @@ namespace MOBA.Controllers
         
         private void RegisterPhysicsBody()
         {
-            if (physicsSystem == null) return;
+            if (physicsSystem == null || string.IsNullOrEmpty(physicsBodyId)) 
+            {
+                Debug.LogWarning("PhysicsLocomotionController: Cannot register physics body - missing physics system or ID");
+                return;
+            }
             
             PhysicsBodySettings settings = PhysicsBodySettings.Default;
             settings.mass = 1f;
@@ -210,10 +251,19 @@ namespace MOBA.Controllers
         }
         
         /// <summary>
-        /// Attempt to jump
+        /// Attempt to jump using enhanced jump system or fallback to legacy
         /// </summary>
         public void TryJump()
         {
+            // Use enhanced jump system if available
+            if (enhancedJumpController != null)
+            {
+                // The enhanced jump controller handles all jump logic
+                // We just trigger the input event
+                return;
+            }
+            
+            // Fallback to legacy jump system
             bool canJump = false;
             
             if (IsGrounded || lastGroundedTime <= coyoteTime)
@@ -231,11 +281,46 @@ namespace MOBA.Controllers
             
             if (canJump)
             {
-                PerformJump();
+                PerformLegacyJump();
             }
         }
         
-        private void PerformJump()
+        /// <summary>
+        /// Enhanced jump using JumpPhysicsDef
+        /// </summary>
+        public void PerformEnhancedJump(float jumpVelocity, bool isDoubleJump = false)
+        {
+            if (physicsSystem == null) return;
+            
+            PhysicsBody body = physicsSystem.GetBody(physicsBodyId);
+            if (body == null) return;
+            
+            // Reset vertical velocity for double jumps
+            if (isDoubleJump)
+            {
+                Vector3 currentVel = body.velocity;
+                physicsSystem.SetBodyVelocity(physicsBodyId, 
+                    new Vector3(currentVel.x, 0f, currentVel.z));
+            }
+            
+            // Apply jump impulse
+            Vector3 jumpImpulse = Vector3.up * jumpVelocity;
+            physicsSystem.ApplyImpulse(physicsBodyId, jumpImpulse);
+            
+            // Clear jump buffer
+            jumpBufferTimer = 0f;
+            
+            // Trigger events
+            OnJump?.Invoke();
+            
+            // Transition to airborne state
+            if (fsm != null && airborneState != null)
+            {
+                fsm.Change(airborneState, isDoubleJump ? "Double Jump" : "Jump");
+            }
+        }
+        
+        private void PerformLegacyJump()
         {
             if (physicsSystem == null) return;
             
